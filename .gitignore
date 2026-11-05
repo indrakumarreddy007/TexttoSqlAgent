@@ -8,3 +8,10 @@ __pycache__/
 *.egg-info/
 .env
 .venv/
+
+# eval runtime state (keep only the last-* summary reports)
+eval/reports/*
+!eval/reports/last-oracle.json
+!eval/reports/last-oracle.md
+!eval/reports/last-live.json
+!eval/reports/last-live.md
