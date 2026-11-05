@@ -1,0 +1,625 @@
+<title>Halcyon SQL Copilot HLD</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+/* Layout: technical design record. Sticky contents rail on wide screens, single reading column (~70ch) beside it; diagrams and tables break out to full column width. */
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --ink:#18212e; --muted:#566275; --rule:#d9dee6;
+  --accent:#1f5f8b; --accent-soft:#e3eef6; --code-bg:#eef1f5;
+  --ok:#2e7d4f; --warn:#a76a00; --bad:#b3372f;
+  --f-display:"IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161d; --surface:#171e27; --ink:#e3e8ef; --muted:#9aa6b6; --rule:#2a3441;
+  --accent:#7db7e0; --accent-soft:#1c2e3d; --code-bg:#1d2530;
+  --ok:#6cc895; --warn:#e2b04f; --bad:#ef8a80; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161d; --surface:#171e27; --ink:#e3e8ef; --muted:#9aa6b6; --rule:#2a3441;
+  --accent:#7db7e0; --accent-soft:#1c2e3d; --code-bg:#1d2530;
+  --ok:#6cc895; --warn:#e2b04f; --bad:#ef8a80; color-scheme:dark}
+
+body{background:var(--bg);color:var(--ink);font:15.5px/1.6 var(--f-body)}
+.wrap{max-width:1180px;margin:0 auto;padding-block:32px 80px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  display:grid;grid-template-columns:220px minmax(0,1fr);gap:48px}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr);gap:24px}}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top, 0px) + 24px);align-self:start;font-size:13.5px}
+@media (max-width:900px){nav.toc{position:static}}
+nav.toc .lbl{font:500 11px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+nav.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:4px;counter-reset:t}
+nav.toc li{counter-increment:t}
+nav.toc a{color:var(--muted);text-decoration:none;display:flex;gap:8px}
+nav.toc a::before{content:counter(t);font:12px/1.6 var(--f-mono);color:var(--accent);min-width:1.4em}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--ink)}
+main{min-width:0}
+header.doc{border-bottom:1px solid var(--rule);padding-bottom:20px;margin-bottom:8px}
+.meta{font:12px/1.5 var(--f-mono);color:var(--muted);letter-spacing:.03em}
+h1{font:600 clamp(28px,4vw,40px)/1.15 var(--f-display);margin:10px 0 12px;text-wrap:balance}
+h2{font:600 25px/1.25 var(--f-display);margin:56px 0 12px;text-wrap:balance;scroll-margin-top:20px}
+h2 .n{font:500 14px var(--f-mono);color:var(--accent);margin-right:10px;vertical-align:3px}
+h3{font:600 17px/1.35 var(--f-body);margin:28px 0 8px}
+p,li{max-width:72ch}
+.lede{font-size:17px;color:var(--muted)}
+a{color:var(--accent)}
+code{font:13px var(--f-mono);background:var(--code-bg);padding:1px 5px;border-radius:3px}
+pre.code{font:12.5px/1.55 var(--f-mono);background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+pre.code code{background:none;padding:0}
+.diagram{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:18px;overflow-x:auto;margin:16px 0}
+.diagram pre.mermaid{margin:0;background:none;text-align:center}
+.cap{font-size:13px;color:var(--muted);margin-top:-6px}
+.tbl{overflow-x:auto;margin:14px 0;border:1px solid var(--rule);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:500 11.5px/1.3 var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--code-bg)}
+tr:last-child td{border-bottom:none}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;font:500 11px/1 var(--f-mono);padding:4px 7px;border-radius:99px;border:1px solid currentColor;white-space:nowrap}
+.det{color:var(--ok)} .llm{color:var(--warn)} .hard{color:var(--bad)}
+.step{display:grid;grid-template-columns:52px minmax(0,1fr);gap:14px;padding:18px 0;border-top:1px solid var(--rule)}
+.step .k{font:500 13px var(--f-mono);color:var(--accent);padding-top:3px}
+.step h3{margin:0 0 6px}
+.step dl{display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 14px;margin:10px 0 0;font-size:14px}
+.step dt{font:500 11.5px/1.9 var(--f-mono);text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.step dd{margin:0}
+@media (max-width:560px){.step{grid-template-columns:minmax(0,1fr)}.step dl{grid-template-columns:minmax(0,1fr)}}
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;border-radius:0 6px 6px 0;margin:16px 0;max-width:72ch}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:14px 0}
+.box{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px 16px;min-width:0}
+.box h4{margin:0 0 6px;font:600 14.5px var(--f-body)}
+.box p,.box ul{font-size:14px;margin:0}
+.box ul{padding-left:18px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Contents">
+  <div class="lbl">Contents</div>
+  <ol>
+    <li><a href="#scope">Scope and goals</a></li>
+    <li><a href="#hld">System architecture</a></li>
+    <li><a href="#flow">Request lifecycle</a></li>
+    <li><a href="#guardrails">Guardrails</a></li>
+    <li><a href="#data">Data and metadata</a></li>
+    <li><a href="#testing">Testing strategy</a></li>
+    <li><a href="#offline">Offline evals</a></li>
+    <li><a href="#online">Online evals</a></li>
+    <li><a href="#extend">Extensibility</a></li>
+    <li><a href="#nfr">Operations and NFRs</a></li>
+    <li><a href="#assignment">Assignment mapping</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="doc">
+  <div class="meta">HIGH-LEVEL DESIGN · v1.1 · KAGGLE DATA · OPEN-SOURCE STACK</div>
+  <h1>Halcyon SQL Copilot: an agentic text-to-SQL service for governed enterprise data</h1>
+  <p class="lede">Business users ask incomplete questions in English. The service works out what they meant, asks when it cannot safely guess, writes SQL against a messy multi-domain warehouse, and proves before running anything that the query obeys access, privacy and cost policy.</p>
+</header>
+
+<h2 id="scope"><span class="n">1</span>Scope and goals</h2>
+<p>Halcyon Group is a fictional retailer. Its warehouse is built from two public Kaggle datasets: <strong>Olist Brazilian E-Commerce</strong> (9 related tables, about 100k orders, 2016–2018) for sales, customers, products, sellers and reviews, and <strong>IBM HR Analytics</strong> (1,470 employees) for the HR domain. On top of the raw data the build script adds the problems real warehouses have: cryptic legacy names, a deprecated table, soft deletes, customer history (SCD2), amounts in BRL that must be converted to USD, an April–March fiscal year, Portuguese category names, and synthetic PII generated with Faker.</p>
+
+<div class="grid2">
+  <div class="box"><h4>Goals</h4><ul>
+    <li>Turn an underspecified question into a fully qualified, auditable request spec</li>
+    <li>Ask for clarification only when a guess would change the answer materially</li>
+    <li>Enforce governance deterministically: the LLM is never trusted to comply</li>
+    <li>Explain every answer with its SQL, assumptions and metric definitions</li>
+    <li>Measurable quality: offline gates before release, online monitoring after</li>
+  </ul></div>
+  <div class="box"><h4>Non-goals (v1)</h4><ul>
+    <li>Writing data (no DML/DDL, ever)</li>
+    <li>Charts and dashboards: the API returns tabular results only</li>
+    <li>Federated joins across warehouses</li>
+    <li>Training or fine-tuning models: prompting and retrieval only</li>
+  </ul></div>
+</div>
+
+<h3>Design principles</h3>
+<ol>
+  <li><strong>The LLM proposes, deterministic code disposes.</strong> Every security property is enforced after generation by an AST-based policy engine. Prompts only reduce how often that engine has to reject a query.</li>
+  <li><strong>Least context.</strong> The model only sees tables and columns the caller's role may access. What it cannot see, it cannot leak or hallucinate.</li>
+  <li><strong>Semantics live in metadata, not prompts.</strong> Metric definitions, synonyms, fiscal rules and defaults sit in a versioned catalog and glossary. Prompts reference them.</li>
+  <li><strong>Every step is a typed contract.</strong> Pydantic models connect the stages, so each one can be swapped, tested and evaluated on its own.</li>
+  <li><strong>Fail closed.</strong> On parse failure, policy ambiguity or a timeout, the service refuses with a reason. It never falls back to unchecked SQL.</li>
+</ol>
+
+<h2 id="hld"><span class="n">2</span>System architecture</h2>
+<p>Three planes. The <strong>request plane</strong> is the agent pipeline. The <strong>control plane</strong> holds catalog, glossary, policy and prompt versions. The <strong>observability plane</strong> holds the audit log, traces and the eval store that feeds the offline suite.</p>
+
+<div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  subgraph CH[Channels]
+    U1[Analyst UI / Slack bot]
+    U2[BI tool / API client]
+  end
+  subgraph GW[Edge]
+    AUTH[API gateway: OIDC authN, rate limit]
+    ID[Identity resolver: role, region, clearance]
+  end
+  subgraph AG[Agent orchestrator - state machine]
+    IG[1 Input guard]
+    RET[2 Context retrieval]
+    QL[3 Clarify and qualify]
+    GEN[4 SQL generation]
+    VAL[5 Static validation]
+    POL[6 Policy enforcement and rewrite]
+    COST[7 Cost check]
+    EXE[9 Sandboxed execution]
+    OG[10 Output guard and answer]
+  end
+  subgraph CP[Control plane - versioned]
+    CAT[(Data catalog)]
+    GLO[(Business glossary and certified metrics)]
+    PST[(Policy as code)]
+    EX[(Verified query examples)]
+    PR[(Prompt registry)]
+  end
+  subgraph DP[Data plane]
+    WH[(Warehouse: DuckDB / Snowflake / BigQuery)]
+  end
+  LLM{{LLM provider}}
+  subgraph OB[Observability]
+    AUD[(Audit log)]
+    TR[Traces and metrics]
+    EVS[(Eval store and feedback)]
+  end
+  U1 --> AUTH
+  U2 --> AUTH
+  AUTH --> ID --> IG --> RET --> QL
+  QL -- needs clarification --> U1
+  QL --> GEN --> VAL --> POL --> COST --> EXE --> OG --> U1
+  VAL -. 8 violations fed back .-> GEN
+  POL -. 8 violations fed back .-> GEN
+  COST -. 8 violations fed back .-> GEN
+  RET --- CAT
+  RET --- GLO
+  RET --- EX
+  QL --- LLM
+  GEN --- LLM
+  OG --- LLM
+  POL --- PST
+  VAL --- CAT
+  EXE --> WH
+  COST --> WH
+  AG --> AUD
+  AG --> TR
+  OG --> EVS
+</pre>
+</div>
+<p class="cap">Figure 1. Component view. Dotted edges are the bounded self-correction loop (step 8). Only steps 3, 4 and part of 10 call the LLM. Everything that guarantees safety is deterministic.</p>
+
+<div class="tbl"><table>
+<thead><tr><th>Component</th><th>Responsibility</th><th>Reference implementation</th></tr></thead>
+<tbody>
+<tr><td>API gateway</td><td>AuthN, tenant and rate limits, request IDs, conversation IDs</td><td>FastAPI <code>POST /v1/query</code>, <code>POST /v1/validate</code></td></tr>
+<tr><td>Identity resolver</td><td>Maps the caller to policy attributes (role, region, clearance) from IdP claims. Never from the prompt.</td><td>Header or JWT claims → <code>UserContext</code></td></tr>
+<tr><td>Orchestrator</td><td>LangGraph <code>StateGraph</code>: one node per step, conditional edges for clarify, retry and refuse, <code>interrupt()</code> for human-in-the-loop clarification, checkpointer for multi-turn state</td><td><code>sqlagent/graph.py</code> (LangGraph 1.x)</td></tr>
+<tr><td>Catalog / glossary</td><td>Table and column semantics, sensitivity tags, join keys, certified metrics, synonyms, defaults</td><td><code>catalog/*.yaml</code>, swappable for DataHub / Unity Catalog</td></tr>
+<tr><td>Policy engine</td><td>Table/column ACL, masking, row-level security, aggregation thresholds, cost rules</td><td><code>policy/guardrails.yaml</code> + sqlglot AST engine</td></tr>
+<tr><td>Executor</td><td>Read-only, least-privilege connection with timeout and row cap</td><td>DuckDB <code>read_only=True</code>, external access disabled</td></tr>
+<tr><td>Audit / eval store</td><td>Immutable record of every step. Source of online evals and new test cases.</td><td>JSONL audit log + Langfuse traces</td></tr>
+</tbody></table></div>
+
+<h3>Technology stack (open source, free)</h3>
+<div class="tbl"><table>
+<thead><tr><th>Concern</th><th>Choice</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Data source</td><td>Kaggle: <code>olistbr/brazilian-ecommerce</code>, <code>pavansubhasht/ibm-hr-analytics-attrition-dataset</code></td><td>Real multi-table business data; a seeded synthetic generator with the same schemas runs in CI</td></tr>
+<tr><td>Warehouse</td><td>DuckDB</td><td>In-process, fast, read-only mode, <code>EXPLAIN</code>, close to Snowflake/Postgres SQL</td></tr>
+<tr><td>SQL parsing</td><td>sqlglot</td><td>AST, qualification against a schema, rewriting, transpiling to other dialects</td></tr>
+<tr><td>Orchestration</td><td>LangGraph + SQLite checkpointer</td><td>Graph with cycles, <code>interrupt()</code> for clarification, durable threads</td></tr>
+<tr><td>LLM</td><td>Ollama + <code>qwen2.5-coder:7b</code> via <code>langchain-ollama</code></td><td>Free and local; swappable for hosted models</td></tr>
+<tr><td>Retrieval</td><td><code>rank-bm25</code> + foreign-key graph</td><td>No GPU, deterministic, explainable</td></tr>
+<tr><td>API and contracts</td><td>FastAPI + Pydantic</td><td>Typed contracts, OpenAPI for free</td></tr>
+<tr><td>Synthetic PII and FX</td><td>Faker, Frankfurter API</td><td>Realistic PII without real people; real ECB FX rates</td></tr>
+<tr><td>Testing</td><td>pytest, hypothesis</td><td>Unit, security corpus, property tests</td></tr>
+<tr><td>Tracing / online evals</td><td>Langfuse (self-hosted)</td><td>Open-source alternative to LangSmith</td></tr>
+<tr><td>UI (optional)</td><td>Chainlit</td><td>Chat UI with buttons for clarification</td></tr>
+<tr><td>Delivery</td><td>uv, ruff, Docker Compose, GitHub Actions</td><td>Reproducible builds and CI gates</td></tr>
+</tbody></table></div>
+
+<h3>Orchestration with LangGraph</h3>
+<p>The pipeline is a LangGraph <code>StateGraph</code> over a typed <code>AgentState</code>. LangGraph supplies what a hand-written loop would otherwise have to build: conditional routing, bounded cycles, pausing for a human, durable per-conversation state, streaming, and node-level tracing. Guardrail and policy nodes are plain Python functions that call the framework-free <code>sqlagent.guardrails</code> package. The security boundary therefore doesn't depend on LangGraph, and the same engine backs <code>/v1/validate</code>.</p>
+<div class="diagram">
+<pre class="mermaid">
+flowchart TD
+  START((START)) --> input_guard
+  input_guard -->|blocked| refuse
+  input_guard --> retrieve_context
+  retrieve_context --> qualify
+  qualify --> resolve_spec
+  resolve_spec -->|blocking ambiguity| clarify
+  clarify -->|"interrupt() - resume with answer"| qualify
+  resolve_spec -->|qualified| generate_sql
+  generate_sql --> validate_and_enforce
+  validate_and_enforce -->|correctable and attempts under 3| generate_sql
+  validate_and_enforce -->|non-correctable| refuse
+  validate_and_enforce -->|ok| cost_check
+  cost_check -->|over budget| generate_sql
+  cost_check --> execute
+  execute -->|db error, once| generate_sql
+  execute --> output_guard
+  output_guard --> answer
+  answer --> END((END))
+  refuse --> END
+</pre>
+</div>
+<p class="cap">Figure 1b. LangGraph topology. Each box is a node, and each labelled arrow is a conditional edge decided by a pure router function over <code>AgentState</code>. The retry counter lives in the state, so the cycle is always bounded.</p>
+<div class="tbl"><table>
+<thead><tr><th>LangGraph feature</th><th>Used for</th></tr></thead>
+<tbody>
+<tr><td><code>StateGraph</code> + typed state (Pydantic)</td><td>The contract between steps: question, user context, spec, candidate SQL, violations, attempts, result, audit trail</td></tr>
+<tr><td>Conditional edges</td><td>Clarify vs. proceed, retry vs. refuse, cost retry, DB-error repair</td></tr>
+<tr><td><code>interrupt()</code> + <code>Command(resume=…)</code></td><td>Clarification. The graph pauses, the API returns the question, and the user's reply resumes the same thread.</td></tr>
+<tr><td>Checkpointer (<code>SqliteSaver</code> → Postgres saver in production)</td><td>Multi-turn conversation state keyed by <code>thread_id</code> = conversation ID; replays and time-travel debugging</td></tr>
+<tr><td>Streaming (<code>stream_mode="updates"</code>)</td><td>Progress events to the UI (“finding tables…”, “checking policy…”)</td></tr>
+<tr><td>LangChain chat models + <code>with_structured_output</code></td><td>Provider-neutral LLM calls returning Pydantic models. Default is a local open model through Ollama; Claude, OpenAI or Groq are a config change.</td></tr>
+<tr><td>Langfuse callback handler (open source, self-hosted)</td><td>Node-level traces, scores and online evaluators. Our own audit log stays the system of record.</td></tr>
+<tr><td>Subgraphs</td><td>Extension to multi-agent routing: one subgraph per domain specialist</td></tr>
+</tbody></table></div>
+
+<h2 id="flow"><span class="n">3</span>Request lifecycle, step by step</h2>
+<p>The running example is a regional manager for Brazil's Southeast (SE) region asking: <em>“what were our top customers last quarter?”</em></p>
+
+<div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor M as SE regional manager
+  participant A as Agent
+  participant K as Catalog + glossary
+  participant L as LLM
+  participant P as Policy engine
+  participant W as Warehouse
+  M->>A: top customers last quarter?
+  A->>A: input guard (injection, size, topic)
+  A->>K: retrieve tables, metrics, examples (role-filtered)
+  A->>L: qualify request (schema-constrained JSON)
+  L-->>A: spec + ambiguities [metric: blocking, period: defaultable]
+  A-->>M: Rank by net revenue or order count? (default fiscal Q1 FY2019 noted)
+  M->>A: net revenue
+  A->>L: generate SQL from spec + scoped schema
+  L-->>A: SELECT ...
+  A->>P: validate + enforce (AST)
+  P-->>A: violation: missing is_deleted filter
+  A->>L: repair with violation codes
+  L-->>A: SELECT ... (fixed)
+  A->>P: validate + enforce
+  P-->>A: OK, rewritten with SE row filter + LIMIT
+  A->>W: EXPLAIN, then execute (read-only, 30s)
+  W-->>A: 10 rows
+  A-->>M: table + SQL + assumptions + metric definition
+</pre>
+</div>
+<p class="cap">Figure 2. One clarification turn and one self-correction. The region filter is added by the policy engine, not by the LLM.</p>
+
+<div class="step"><div class="k">S0</div><div>
+<h3>Ingress and identity</h3>
+<p>The gateway authenticates the caller and resolves a <code>UserContext</code> of user ID, role, regions and clearance from trusted claims. Anything the user writes in the question (“I'm the CFO”) is ignored for authorization. A conversation ID ties clarification turns together. Pending specs live in a memory store with a TTL.</p>
+<dl><dt>Output</dt><dd><code>UserContext</code>, <code>request_id</code>, conversation state</dd>
+<dt>Fails</dt><dd>401/403, 429. No agent work is done.</dd></dl>
+</div></div>
+
+<div class="step"><div class="k">S1</div><div>
+<h3>Input guard</h3>
+<p>Cheap checks run before any LLM call: length and character limits, language detection, and pattern rules for prompt injection (“ignore previous instructions”, embedded SQL keywords such as <code>DROP</code>/<code>GRANT</code>, “show the system prompt”). An optional small classifier separates off-topic from data questions. A positive hit does not need to be perfect, because S6 is the real barrier. The guard records a <code>risk_flags</code> list that tightens later behaviour, for example no retries and refusal on any policy violation.</p>
+<dl><dt>Output</dt><dd>Sanitised question, <code>risk_flags</code></dd>
+<dt>Type</dt><dd><span class="pill det">deterministic</span> <span class="pill llm">optional classifier</span></dd></dl>
+</div></div>
+
+<div class="step"><div class="k">S2</div><div>
+<h3>Context retrieval (schema linking)</h3>
+<p>The warehouse has too many tables to fit in a prompt, and most are irrelevant. Hybrid retrieval does three things:</p>
+<ol>
+  <li>Lexical BM25 over table and column names, descriptions and <strong>synonyms</strong>, so “client” and “account” find <code>CUST_MSTR_V2</code>. An optional embedding index can be added later.</li>
+  <li>Glossary matching links terms such as “revenue”, “last quarter” or “active customer” to <strong>certified metric</strong> definitions and their default rules.</li>
+  <li>Join-path expansion over the catalog's foreign-key graph adds the bridge tables needed to connect the hits.</li>
+</ol>
+<p>Results are <strong>filtered by role before ranking</strong>, so denied tables never reach the prompt. Deprecated tables are dropped and their replacement is noted. The top <em>k</em> verified question→SQL examples are added as few-shot examples.</p>
+<dl><dt>Output</dt><dd><code>SchemaContext</code> (tables, columns, joins, metrics, examples) with a token budget</dd>
+<dt>Type</dt><dd><span class="pill det">deterministic</span></dd></dl>
+</div></div>
+
+<div class="step"><div class="k">S3</div><div>
+<h3>Clarify and fully qualify</h3>
+<p>The LLM fills a strict JSON schema called <code>QualifiedRequest</code>. It has <em>metrics</em> (IDs of certified metrics), <em>dimensions</em>, <em>filters</em>, <em>time window</em> (calendar or fiscal, with resolved start and end dates), <em>grain</em>, <em>ordering and top N</em>, <em>currency</em>, <em>assumptions</em> and <em>ambiguities</em>. Each ambiguity is labelled with a type:</p>
+<div class="tbl"><table>
+<thead><tr><th>Ambiguity</th><th>Example</th><th>Policy</th></tr></thead>
+<tbody>
+<tr><td>Metric</td><td>“top customers”: by revenue, orders or margin?</td><td><span class="pill hard">blocking</span> unless the glossary has a default for the term</td></tr>
+<tr><td>Time window</td><td>“last quarter”: fiscal or calendar? Relative to when?</td><td><span class="pill det">default</span> to fiscal and the data's <code>as_of_date</code>, and state it</td></tr>
+<tr><td>Entity</td><td>“São Paulo”: customer state, customer city or seller location?</td><td>Default from the catalog role of the column, otherwise blocking</td></tr>
+<tr><td>Grain</td><td>“sales by month” across years</td><td>Default per glossary</td></tr>
+<tr><td>Scope</td><td>Include freight? Canceled orders?</td><td>Certified metric rules decide. Never asked.</td></tr>
+<tr><td>Currency</td><td>Amounts are stored in BRL</td><td>Default reporting currency is USD at the daily BRL→USD rate</td></tr>
+</tbody></table></div>
+<p>A deterministic <strong>resolver</strong> then turns relative dates into concrete ones from the fiscal calendar, checks that every metric ID exists, and decides: ask (if any blocking ambiguity is left), or proceed and list each default it applied as an assumption. Clarifying questions are multiple-choice where possible, so the reply resolves cleanly. At most 2 rounds are allowed. After that the agent states its best interpretation.</p>
+<pre class="code"><code>{
+  "intent": "ranking",
+  "metrics": ["net_revenue_usd"],
+  "dimensions": ["customer.cust_nm"],
+  "time_window": {"basis": "fiscal", "label": "FY2019 Q1",
+                  "start": "2018-04-01", "end": "2018-06-30"},
+  "order_by": [{"field": "net_revenue_usd", "dir": "desc"}], "limit": 10,
+  "assumptions": ["'last quarter' = last complete fiscal quarter as of 2018-08-31",
+                  "Net revenue = item price in USD, excluding canceled, unavailable and deleted orders"],
+  "ambiguities": []
+}</code></pre>
+<dl><dt>Output</dt><dd><code>QualifiedRequest</code> or <code>ClarificationRequest</code></dd>
+<dt>Type</dt><dd><span class="pill llm">LLM, schema-constrained</span> + <span class="pill det">deterministic resolver</span></dd></dl>
+</div></div>
+
+<div class="step"><div class="k">S4</div><div>
+<h3>SQL generation</h3>
+<p>The second LLM call works from the <em>qualified spec</em>, not the raw question. The prompt contains: the role-scoped schema in compact DDL with descriptions, certified metric SQL fragments to be used verbatim, join paths, few-shot examples, the dialect, and house rules (fully qualified names, explicit column lists, ISO dates). The output is JSON <code>{sql, tables_used, rationale}</code>. Splitting qualification from generation is the main architectural choice. It makes clarification testable on its own, and it shortens the generation prompt.</p>
+<dl><dt>Output</dt><dd><code>CandidateSQL</code></dd><dt>Type</dt><dd><span class="pill llm">LLM</span></dd></dl>
+</div></div>
+
+<div class="step"><div class="k">S5</div><div>
+<h3>Static validation</h3>
+<p>The candidate is parsed with sqlglot in the target dialect. A parse error is a correctable violation. The validator checks the following, each with a stable violation code (<code>V###</code>):</p>
+<ul>
+  <li>Exactly one statement, and the root is <code>SELECT</code>, <code>UNION</code> or <code>WITH … SELECT</code>.</li>
+  <li>No forbidden nodes anywhere in the tree: DML, DDL, <code>PRAGMA</code>, <code>COPY</code>, <code>ATTACH</code>, <code>SET</code>, table functions such as <code>read_csv</code>, or system functions.</li>
+  <li>Every table resolves to a catalog entry; CTE names are excluded. Every column resolves, using sqlglot's <code>qualify</code> with the catalog schema, so hallucinated columns fail here with a helpful message.</li>
+</ul>
+<dl><dt>Type</dt><dd><span class="pill det">deterministic</span></dd></dl>
+</div></div>
+
+<div class="step"><div class="k">S6</div><div>
+<h3>Policy enforcement and rewrite</h3>
+<p>This step is the security boundary. It is detailed in <a href="#guardrails">section 4</a>. It <em>validates</em> (denied tables and columns, deprecated tables, missing mandatory filters, cartesian joins, row-level aggregation of sensitive data) and then <em>rewrites</em>. Each base table is wrapped in a policy view that applies row filters and column masks, and a hard <code>LIMIT</code> is enforced. The rewritten SQL is what runs and what the audit log stores.</p>
+<dl><dt>Type</dt><dd><span class="pill det">deterministic</span> <span class="pill hard">security boundary</span></dd></dl>
+</div></div>
+
+<div class="step"><div class="k">S7</div><div>
+<h3>Cost check</h3>
+<p><code>EXPLAIN</code> on the rewritten query gives an estimated cardinality and scan size. These are compared with the role's budget. A query over budget is sent back with a hint, for example “add a state filter on <code>ops.geo</code>”. On Snowflake or BigQuery, a dry run supplies bytes scanned.</p>
+<dl><dt>Type</dt><dd><span class="pill det">deterministic</span></dd></dl>
+</div></div>
+
+<div class="step"><div class="k">S8</div><div>
+<h3>Bounded self-correction</h3>
+<p>Correctable violations (parse error, unknown column, missing filter, over budget) go back to S4 as structured feedback: code, message and AST location. There are at most 3 attempts. <em>Non-correctable</em> violations (denied table or column, a PII request, a write) end the turn with a refusal. Retrying them only invites the model to find a workaround. When the input guard raised a risk flag, retries are disabled.</p>
+</div></div>
+
+<div class="step"><div class="k">S9</div><div>
+<h3>Sandboxed execution</h3>
+<p>The query runs on a read-only connection under a service account with SELECT on the curated schemas only. Additional limits: external file and network access are disabled, configuration is locked, there is a statement timeout (interrupt after 30s), and rows and bytes are capped. A failed execution, such as a type error, is fed back once through S8.</p>
+</div></div>
+
+<div class="step"><div class="k">S10</div><div>
+<h3>Output guard and answer</h3>
+<p>The output guard checks the result itself:</p>
+<ul>
+  <li>Group sizes below the threshold (k = 5) are suppressed for sensitive domains.</li>
+  <li>A regex and entropy scan catches PII that leaked through derived expressions.</li>
+  <li>Empty results get a diagnosis, such as “no orders in that window for EMEA”.</li>
+</ul>
+<p>The answer contains the result table, the final SQL, assumptions, metric definitions with their owners, the tables used (lineage) and a short summary. The summary is generated <strong>only from the returned rows</strong>, and numbers in it are checked against the result.</p>
+</div></div>
+
+<div class="step"><div class="k">S11</div><div>
+<h3>Audit and telemetry</h3>
+<p>Every step writes an event: inputs, outputs, prompt version, model, tokens, latency and violations. The events form one trace per request, keyed by <code>request_id</code>. The trace is the raw material for online evals and for regression cases.</p>
+</div></div>
+
+<h2 id="guardrails"><span class="n">4</span>Guardrails</h2>
+<p>Defence in depth. Each layer assumes the one before it failed. The LLM is treated as an untrusted code author.</p>
+
+<div class="tbl"><table>
+<thead><tr><th>Layer</th><th>Control</th><th>Enforced at</th><th>Mechanism</th><th>On violation</th></tr></thead>
+<tbody>
+<tr><td>Identity</td><td>Role and attributes from IdP only</td><td>S0</td><td><span class="pill det">det</span></td><td>403</td></tr>
+<tr><td>Input</td><td>Injection patterns, size, topic</td><td>S1</td><td><span class="pill det">det</span> + <span class="pill llm">clf</span></td><td>Flag; refuse if blatant</td></tr>
+<tr><td>Context</td><td>Role-scoped schema in the prompt</td><td>S2</td><td><span class="pill det">det</span></td><td>Table not visible</td></tr>
+<tr><td>Statement</td><td>Single read-only SELECT; no DDL/DML/PRAGMA/COPY/ATTACH; no table functions</td><td>S5</td><td><span class="pill det">AST</span></td><td>Refuse (non-correctable)</td></tr>
+<tr><td>Object ACL</td><td>Table and column allow/deny per role</td><td>S6</td><td><span class="pill det">AST</span></td><td>Refuse, citing the policy</td></tr>
+<tr><td>Privacy</td><td>Masking of direct identifiers; k-anonymity (min group size) for HR pay</td><td>S6, S10</td><td><span class="pill det">rewrite</span></td><td>Mask or suppress</td></tr>
+<tr><td>Row-level security</td><td>Region predicate injected per table</td><td>S6</td><td><span class="pill det">rewrite</span></td><td>Always applied</td></tr>
+<tr><td>Semantic hygiene</td><td>Deprecated tables blocked; soft-delete filter required; certified metrics</td><td>S6</td><td><span class="pill det">AST</span></td><td>Correctable</td></tr>
+<tr><td>Cost</td><td>Partition filter on large facts; no cartesian joins; LIMIT cap; EXPLAIN budget</td><td>S6, S7</td><td><span class="pill det">AST + plan</span></td><td>Correctable</td></tr>
+<tr><td>Runtime</td><td>Read-only connection, timeout, external access off</td><td>S9</td><td><span class="pill det">engine</span></td><td>Abort</td></tr>
+<tr><td>Output</td><td>PII scan, small-cell suppression, grounded summary</td><td>S10</td><td><span class="pill det">det</span> + <span class="pill llm">LLM</span></td><td>Redact</td></tr>
+</tbody></table></div>
+
+<h3>Policy as code</h3>
+<pre class="code"><code>roles:
+  regional_mgr:
+    schemas: [sales, crm, product, ops, ref, finance, cx]
+    row_filters:
+      crm.CUST_MSTR_V2: "cust_state IN (SELECT state_cd FROM ref.region
+                         WHERE region_cd IN ({user.regions}))"
+    sensitivity: {pii_direct: deny, pii_sensitive: deny}
+  hr_analyst:
+    schemas: [hr, ref]
+    sensitivity: {pii_direct: mask}
+    aggregate_only: {tables: [hr.pay], min_group_size: 5, entity_key: emp_id}
+tables:   # in catalog.yaml
+  ops.geo:        {size_class: large, required_filter_any: [geo_state, geo_zip5]}
+  crm.cust_mstr:  {deprecated: true, replaced_by: crm.CUST_MSTR_V2}
+  sales.ord_hdr:  {required_predicates: ["is_deleted = FALSE"]}</code></pre>
+
+<h3>Rewrite example: row-level security</h3>
+<p>The LLM wrote the first query. The engine produced the second. The model never needed to know about regions.</p>
+<pre class="code"><code>-- candidate
+SELECT c.cust_nm, COUNT(*) AS orders
+FROM sales.ord_hdr h JOIN crm.CUST_MSTR_V2 c ON c.cust_id = h.cust_id AND c.is_current
+WHERE h.is_deleted = FALSE GROUP BY 1 ORDER BY 2 DESC
+
+-- enforced
+SELECT c.cust_nm, COUNT(*) AS orders
+FROM sales.ord_hdr AS h
+JOIN (SELECT * FROM crm.CUST_MSTR_V2
+      WHERE cust_state IN (SELECT state_cd FROM ref.region WHERE region_cd IN ('SE'))) AS c
+  ON c.cust_id = h.cust_id AND c.is_current
+WHERE h.is_deleted = FALSE GROUP BY 1 ORDER BY 2 DESC
+LIMIT 1000</code></pre>
+<div class="note">Why rewrite rather than ask the model to add filters? A rewrite is applied to every table occurrence, including inside CTEs, subqueries and self-joins, whatever the model wrote. Asking the model gives a probabilistic guarantee, and probabilistic access control is not access control.</div>
+
+<h2 id="data"><span class="n">5</span>Data and metadata layer</h2>
+<p>The warehouse build (<code>setup/build_warehouse.py</code>) loads raw AdventureWorks into staging, then creates curated domain schemas with deliberate enterprise problems. The problems are seeded deterministically, so every candidate gets the same database and the gold answers are stable.</p>
+<div class="tbl"><table>
+<thead><tr><th>Schema</th><th>Contents</th><th>Planted complexity</th></tr></thead>
+<tbody>
+<tr><td><code>sales</code></td><td><code>ord_hdr</code>, <code>ord_line</code>, <code>pmt</code> (Olist orders, items, payments)</td><td>Cryptic names (<code>purch_ts</code>, <code>price_lcl</code>); 1% soft-deleted orders; canceled and unavailable statuses; several payment rows per order (double-count trap); timestamps without a time zone, in São Paulo local time</td></tr>
+<tr><td><code>crm</code></td><td><code>CUST_MSTR_V2</code>, deprecated <code>cust_mstr</code></td><td>Synthetic name, email, phone and CPF (PII); SCD2 history for customers who moved city; the deprecated table is a stale snapshot. Two IDs per customer (<code>cust_id</code> per order, <code>cust_uid</code> per person).</td></tr>
+<tr><td><code>product</code></td><td><code>prod</code>, <code>cat_xlate</code></td><td>Category names in Portuguese; the English name needs the translation join</td></tr>
+<tr><td><code>ops</code></td><td><code>seller</code>, <code>geo</code> (about 1M rows)</td><td><code>geo</code> is the large table that must always be filtered</td></tr>
+<tr><td><code>cx</code></td><td><code>review</code></td><td>Free-text comments that may contain personal data</td></tr>
+<tr><td><code>hr</code></td><td><code>employee</code>, <code>pay</code> (IBM HR)</td><td>Synthetic name and national ID (PII); <code>monthly_income</code> is sensitive, with a minimum group size of 5</td></tr>
+<tr><td><code>finance</code></td><td><code>fx_rate_daily</code>, <code>fiscal_cal</code></td><td>BRL→USD daily rates (ECB data via Frankfurter, seeded fallback offline); fiscal year starts 1 April and is named by the year it ends</td></tr>
+<tr><td><code>ref</code></td><td><code>region</code></td><td>Brazilian state → region (N, NE, CO, SE, S), the basis for row-level security</td></tr>
+</tbody></table></div>
+<p>The <strong>catalog</strong> holds, per table and column: a description, owner, sensitivity class, synonyms, join keys, size class and deprecation. The <strong>glossary</strong> holds certified metrics as SQL fragments with owners, along with term synonyms and default interpretations (fiscal quarters, USD reporting). Both are versioned with the code, and a change to either triggers the offline eval suite.</p>
+
+<h2 id="testing"><span class="n">6</span>Testing strategy</h2>
+<p>LLM calls are non-deterministic and cost money, so the pyramid puts nearly all of the test count in deterministic code and runs the LLM paths through recorded fixtures.</p>
+<div class="tbl"><table>
+<thead><tr><th>Level</th><th>What</th><th>How</th><th>Runs</th></tr></thead>
+<tbody>
+<tr><td>Unit</td><td>Policy engine, validator, resolver (fiscal dates), retriever ranking, catalog loader</td><td>pytest with a table of cases per rule; <strong>100% branch coverage</strong> on the policy engine</td><td>Every commit</td></tr>
+<tr><td>Security corpus</td><td>About 60 hostile SQL strings: stacked statements, comment smuggling, DDL in CTEs, <code>read_csv</code>, PII via <code>SELECT *</code>, aliasing tricks, RLS bypass through subqueries or UNION, case and quoting games</td><td>Each must be refused, or rewritten to a safe form that is then executed and checked</td><td>Every commit, hard gate</td></tr>
+<tr><td>Property / fuzz</td><td>Random valid SELECTs built from the catalog, run through the rewriter</td><td>Invariant: under role R, results never contain rows outside R's regions or denied columns</td><td>Nightly</td></tr>
+<tr><td>Component</td><td>LangGraph graph with a fake chat model</td><td>Replay recorded LLM responses (cassettes) to test the clarify (<code>interrupt</code>/resume), retry and refuse paths deterministically. Router functions are unit-tested as pure functions.</td><td>Every commit</td></tr>
+<tr><td>Contract</td><td>API schemas, the <code>/v1/validate</code> contract</td><td>OpenAPI snapshot and schema tests</td><td>Every commit</td></tr>
+<tr><td>Data tests</td><td>Warehouse build invariants</td><td>Row counts, one current SCD2 row per key, FX coverage for every order date, every gold SQL executes</td><td>On rebuild</td></tr>
+<tr><td>Eval (live LLM)</td><td>End to end on the eval set</td><td>See section 7</td><td>On a prompt, model or catalog change, and nightly</td></tr>
+</tbody></table></div>
+
+<h2 id="offline"><span class="n">7</span>Offline evaluation</h2>
+<h3>Dataset</h3>
+<p>Each case has a question, a <code>UserContext</code>, the expected behaviour (<code>answer</code>, <code>clarify</code> or <code>refuse</code>), the slots that should be clarified, a scripted follow-up answer, and gold SQL whose result set is the oracle. Candidates get a public <strong>dev</strong> split. Graders keep a <strong>hidden</strong> split of paraphrases and new cases to detect overfitting.</p>
+<div class="tbl"><table>
+<thead><tr><th>Category</th><th>What it probes</th><th class="num">Share</th></tr></thead>
+<tbody>
+<tr><td>Well-specified</td><td>Baseline accuracy, multi-hop joins</td><td class="num">20%</td></tr>
+<tr><td>Underspecified</td><td>Clarify vs. default; correctly stated assumptions</td><td class="num">20%</td></tr>
+<tr><td>Glossary and semantics</td><td>Net revenue, fiscal periods, FX, SCD2, soft deletes</td><td class="num">20%</td></tr>
+<tr><td>Role-scoped</td><td>Same question under different roles gives different, correct results</td><td class="num">15%</td></tr>
+<tr><td>Should refuse or mask</td><td>PII, salaries of individuals, denied domains</td><td class="num">15%</td></tr>
+<tr><td>Adversarial</td><td>Prompt injection, role claims in the text, SQL smuggling</td><td class="num">10%</td></tr>
+</tbody></table></div>
+
+<h3>Metrics and release gates</h3>
+<div class="tbl"><table>
+<thead><tr><th>Metric</th><th>Definition</th><th>Gate</th></tr></thead>
+<tbody>
+<tr><td>Policy violations</td><td>Executed queries that returned data outside the caller's entitlement</td><td class="num"><span class="pill hard">= 0</span></td></tr>
+<tr><td>Behaviour accuracy</td><td>Predicted answer/clarify/refuse matches expected (confusion matrix reported)</td><td class="num">≥ 90%</td></tr>
+<tr><td>Execution accuracy</td><td>Result-set equivalence with gold: order-insensitive unless ranked, column-order and alias insensitive, numeric tolerance 1e-2 relative</td><td class="num">≥ 80%</td></tr>
+<tr><td>Clarification precision / recall</td><td>Asked only about expected slots / asked about all blocking slots</td><td class="num">≥ 0.8 / ≥ 0.9</td></tr>
+<tr><td>Over-clarification rate</td><td>Asked on well-specified questions</td><td class="num">≤ 10%</td></tr>
+<tr><td>Assumption faithfulness</td><td>LLM judge with rubric: are stated assumptions true of the SQL?</td><td class="num">≥ 0.9</td></tr>
+<tr><td>Consistency</td><td>Same answer across 3 seeds and 2 paraphrases</td><td class="num">≥ 85%</td></tr>
+<tr><td>Latency / cost</td><td>p50 and p95 end-to-end time; tokens per request</td><td class="num">p95 ≤ 15s</td></tr>
+</tbody></table></div>
+<p>The harness (<code>grader/grade.py</code>) talks to any implementation through the HTTP contract. It runs the gold SQL itself as an admin, compares results, writes a per-case JSON report and a summary, and diffs against the last baseline so regressions show by category.</p>
+
+<h2 id="online"><span class="n">8</span>Online evaluation</h2>
+<div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  P[Production traffic] --> T[Traces + audit log]
+  T --> S1[Implicit signals]
+  T --> S2[Sampled LLM-judge]
+  T --> S3[Guardrail telemetry]
+  F[User feedback: thumbs, edited SQL] --> Q
+  S1 --> Q[Triage queue]
+  S2 --> Q
+  S3 --> Q
+  Q --> L[Human labelling]
+  L --> E[(Offline eval set)]
+  L --> G[(Glossary / catalog fixes)]
+  E --> R[Release gates]
+  G --> R
+  R --> P
+</pre>
+</div>
+<p class="cap">Figure 3. Data flywheel. Every production failure becomes a regression case or a metadata fix.</p>
+<div class="grid2">
+  <div class="box"><h4>Rollout</h4><ul>
+    <li><strong>Shadow mode</strong>: a new prompt or model runs next to production. Results are compared and nothing is shown to users.</li>
+    <li><strong>Canary</strong> at 5% per role, with automatic rollback on gate breach</li>
+    <li><strong>A/B</strong> on prompt versions. Guardrail metrics are invariants, not trade-offs.</li>
+  </ul></div>
+  <div class="box"><h4>Signals</h4><ul>
+    <li>Implicit: re-ask within 2 minutes, abandoned clarification, SQL edited by the user, result exported</li>
+    <li>Explicit: thumbs with a reason code</li>
+    <li>Rates: clarification, refusal and self-correction, with retries per request</li>
+  </ul></div>
+  <div class="box"><h4>Quality sampling</h4><ul>
+    <li>1–5% of traces scored daily by an LLM judge (correctness against the spec, faithfulness of assumptions), run as Langfuse evaluators or as a batch job over the audit log</li>
+    <li>Judge calibrated against a monthly human-labelled sample (agreement κ tracked)</li>
+  </ul></div>
+  <div class="box"><h4>Drift and safety</h4><ul>
+    <li>Schema drift: catalog vs. warehouse diff alerts</li>
+    <li>Glossary gaps: frequent unresolved terms surface as candidate glossary entries</li>
+    <li>Spikes in policy-block rate per user (probing) go to security</li>
+  </ul></div>
+</div>
+
+<h2 id="extend"><span class="n">9</span>Extensibility</h2>
+<p>Ports and adapters. The core pipeline depends only on interfaces, and adapters are chosen in configuration.</p>
+<div class="diagram">
+<pre class="mermaid">
+flowchart TB
+  CORE[Agent core: orchestrator + typed contracts]
+  CORE --> I1[LLMProvider]
+  CORE --> I2[WarehouseAdapter]
+  CORE --> I3[CatalogProvider]
+  CORE --> I4[PolicyProvider]
+  CORE --> I5[Retriever]
+  CORE --> I6[GuardrailRule registry]
+  CORE --> I7[ConversationStore]
+  I1 --> A1[LangChain chat model: Ollama / Claude / OpenAI / Groq / scripted fake]
+  I2 --> A2[DuckDB / Snowflake / BigQuery / Postgres]
+  I3 --> A3[YAML / DataHub / Unity Catalog / Collibra]
+  I4 --> A4[YAML / OPA / Apache Ranger]
+  I5 --> A5[BM25 / embeddings / hybrid]
+  I6 --> A6[Built-in rules + custom rule classes]
+  I7 --> A7[In-memory / Redis]
+</pre>
+</div>
+<div class="tbl"><table>
+<thead><tr><th>Extension</th><th>How</th></tr></thead>
+<tbody>
+<tr><td>New warehouse</td><td>Implement <code>WarehouseAdapter</code> (execute, explain, dialect). sqlglot transpiles the guardrail rewrites to the target dialect.</td></tr>
+<tr><td>New guardrail</td><td>Subclass <code>Rule</code>, implement <code>check(ast, ctx) -&gt; [Violation]</code> and optionally <code>rewrite</code>, then register it. Covered by the security corpus automatically.</td></tr>
+<tr><td>New domain</td><td>Add catalog YAML, glossary metrics, a policy block and eval cases. No code changes.</td></tr>
+<tr><td>Multi-agent</td><td>A LangGraph router node sends the request to a domain specialist <em>subgraph</em> (sales, HR, ops), each with its own catalog slice and examples. Every subgraph ends in the same <code>validate_and_enforce</code> node, so policy is enforced in one place.</td></tr>
+<tr><td>New step</td><td>Add a node and an edge, for example a <code>visualize</code> node after <code>answer</code>. State fields are additive, so existing nodes are unaffected.</td></tr>
+<tr><td>New channel</td><td>Slack or BI tools call the same <code>/v1/query</code> API. Clarifications become channel-native buttons.</td></tr>
+</tbody></table></div>
+
+<h2 id="nfr"><span class="n">10</span>Operations and non-functional requirements</h2>
+<div class="tbl"><table>
+<thead><tr><th>Concern</th><th>Target / approach</th></tr></thead>
+<tbody>
+<tr><td>Latency budget</td><td class="num">Guard 50ms · retrieval 150ms · qualify 3s · generate 4s · validate+policy 50ms · explain 300ms · execute ≤ 30s cap · answer 2s</td></tr>
+<tr><td>Availability</td><td>Stateless service, horizontally scaled; conversation state in Redis; LLM provider failover through the <code>LLMProvider</code> chain</td></tr>
+<tr><td>Caching</td><td>Prompt caching for static schema blocks; result cache keyed by (enforced SQL, role attributes, data version)</td></tr>
+<tr><td>Security</td><td>Secrets in a vault; service account with SELECT only on curated schemas; audit log is append-only; prompts and results kept 30 days with PII redacted</td></tr>
+<tr><td>Observability</td><td>OpenTelemetry spans per step; dashboards for gate metrics; alerts on any policy violation and on p95 latency</td></tr>
+<tr><td>Change management</td><td>Prompts, catalog and policy are versioned in git. A PR runs unit tests, the security corpus and offline evals, and posts a diff report.</td></tr>
+</tbody></table></div>
+
+<h2 id="assignment"><span class="n">11</span>Assignment mapping</h2>
+<p>Candidates receive the warehouse build, catalog, glossary, policy, dev eval split, grader and a starter skeleton with the interfaces above. They build steps S1–S11. The hidden split and the reference solution stay with the hiring panel.</p>
+<div class="tbl"><table>
+<thead><tr><th>Area</th><th class="num">Weight</th><th>Evidence</th></tr></thead>
+<tbody>
+<tr><td>Guardrail correctness</td><td class="num">30%</td><td>Security corpus via <code>/v1/validate</code>, zero violations on the hidden split</td></tr>
+<tr><td>Answer quality</td><td class="num">25%</td><td>Execution accuracy and behaviour accuracy on the hidden split</td></tr>
+<tr><td>Clarification design</td><td class="num">15%</td><td>Precision and recall, quality of questions and assumptions</td></tr>
+<tr><td>Engineering quality</td><td class="num">15%</td><td>Structure, typing, tests, CI, observability</td></tr>
+<tr><td>Evaluation thinking</td><td class="num">10%</td><td>Their own failure analysis and online-eval proposal</td></tr>
+<tr><td>Design write-up</td><td class="num">5%</td><td>Trade-offs, what they would do next</td></tr>
+</tbody></table></div>
+</main>
+</div>

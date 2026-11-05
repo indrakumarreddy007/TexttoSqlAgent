@@ -1,0 +1,176 @@
+# Business glossary: certified metrics, term synonyms and default interpretations.
+# Metric `sql` is an aggregate expression over the aliases in `from`. The generator is
+# told to use it verbatim; evals check results against these definitions.
+
+version: 1
+defaults:
+  as_of_date: "2018-08-31"        # "today" for relative dates (last complete month of data)
+  time_basis: fiscal              # quarters/years are fiscal unless the user says calendar
+  fiscal_year_start_month: 4
+  currency: USD                   # amounts reported in USD at the daily rate of the order date
+  top_n: 10
+  default_metric_for_ranking: null  # no default: "top X" without a metric is a blocking ambiguity
+
+metrics:
+  net_revenue_usd:
+    label: "Net revenue (USD)"
+    owner: finance-data@halcyon.example
+    description: "Item price converted to USD at the order-date rate. Excludes freight and canceled/unavailable orders."
+    synonyms: [revenue, net revenue, net sales, sales amount, turnover]
+    sql: "SUM(l.price_lcl * fx.rate)"
+    from: |
+      sales.ord_hdr h
+      JOIN sales.ord_line l ON l.ord_id = h.ord_id
+      JOIN finance.fx_rate_daily fx ON fx.rate_dt = CAST(h.purch_ts AS DATE)
+    where: "h.ord_stat_cd NOT IN ('canceled', 'unavailable')"
+    time_column: h.purch_ts
+
+  gmv_usd:
+    label: "Gross merchandise value (USD)"
+    owner: finance-data@halcyon.example
+    description: "Item price plus freight in USD, all order statuses."
+    synonyms: [gmv, gross merchandise value, gross sales, bookings]
+    sql: "SUM((l.price_lcl + l.frt_lcl) * fx.rate)"
+    from: |
+      sales.ord_hdr h
+      JOIN sales.ord_line l ON l.ord_id = h.ord_id
+      JOIN finance.fx_rate_daily fx ON fx.rate_dt = CAST(h.purch_ts AS DATE)
+    where: null
+    time_column: h.purch_ts
+
+  order_count:
+    label: "Orders"
+    owner: sales-data@halcyon.example
+    description: "Distinct orders, excluding canceled/unavailable."
+    synonyms: [orders, number of orders, order volume, order count]
+    sql: "COUNT(DISTINCT h.ord_id)"
+    from: "sales.ord_hdr h"
+    where: "h.ord_stat_cd NOT IN ('canceled', 'unavailable')"
+    time_column: h.purch_ts
+
+  aov_usd:
+    label: "Average order value (USD)"
+    owner: finance-data@halcyon.example
+    description: "Net revenue / orders."
+    synonyms: [aov, average order value, basket size, average basket]
+    sql: "SUM(l.price_lcl * fx.rate) / COUNT(DISTINCT h.ord_id)"
+    from: |
+      sales.ord_hdr h
+      JOIN sales.ord_line l ON l.ord_id = h.ord_id
+      JOIN finance.fx_rate_daily fx ON fx.rate_dt = CAST(h.purch_ts AS DATE)
+    where: "h.ord_stat_cd NOT IN ('canceled', 'unavailable')"
+    time_column: h.purch_ts
+
+  active_customers:
+    label: "Active customers"
+    owner: crm-data@halcyon.example
+    description: "Unique people (cust_uid) with at least one non-canceled order in the period."
+    synonyms: [customers, active customers, unique customers, buyers, number of customers]
+    sql: "COUNT(DISTINCT c.cust_uid)"
+    from: |
+      sales.ord_hdr h
+      JOIN crm.CUST_MSTR_V2 c ON c.cust_id = h.cust_id AND c.is_current
+    where: "h.ord_stat_cd NOT IN ('canceled', 'unavailable')"
+    time_column: h.purch_ts
+
+  avg_review_score:
+    label: "Average review score"
+    owner: cx-data@halcyon.example
+    description: "Mean review score (1-5) of reviews for orders placed in the period."
+    synonyms: [rating, review score, satisfaction, csat, average rating]
+    sql: "AVG(r.score)"
+    from: |
+      sales.ord_hdr h
+      JOIN cx.review r ON r.ord_id = h.ord_id
+    where: null
+    time_column: h.purch_ts
+
+  late_delivery_rate:
+    label: "Late delivery rate"
+    owner: ops-data@halcyon.example
+    description: "Share of delivered orders delivered after the promised date."
+    synonyms: [late deliveries, late rate, on-time, delivery delays]
+    sql: "AVG(CASE WHEN CAST(h.dlvr_ts AS DATE) > h.est_dlvr_dt THEN 1.0 ELSE 0.0 END)"
+    from: "sales.ord_hdr h"
+    where: "h.ord_stat_cd = 'delivered' AND h.dlvr_ts IS NOT NULL"
+    time_column: h.purch_ts
+
+  avg_delivery_days:
+    label: "Average delivery time (days)"
+    owner: ops-data@halcyon.example
+    description: "Mean days from purchase to delivery, delivered orders only."
+    synonyms: [delivery time, shipping time, lead time, days to deliver]
+    sql: "AVG(date_diff('day', h.purch_ts, h.dlvr_ts))"
+    from: "sales.ord_hdr h"
+    where: "h.ord_stat_cd = 'delivered' AND h.dlvr_ts IS NOT NULL"
+    time_column: h.purch_ts
+
+  headcount:
+    label: "Headcount"
+    owner: people-data@halcyon.example
+    description: "Current employees (not attrited)."
+    synonyms: [headcount, employees, staff count, number of employees]
+    sql: "COUNT(DISTINCT e.emp_id)"
+    from: "hr.employee e"
+    where: "NOT e.is_attrited"
+    time_column: null
+
+  attrition_rate:
+    label: "Attrition rate"
+    owner: people-data@halcyon.example
+    description: "Share of employees who have left."
+    synonyms: [attrition, turnover rate, churn rate, attrition rate]
+    sql: "AVG(CASE WHEN e.is_attrited THEN 1.0 ELSE 0.0 END)"
+    from: "hr.employee e"
+    where: null
+    time_column: null
+
+  avg_monthly_income:
+    label: "Average monthly income (USD)"
+    owner: people-data@halcyon.example
+    description: "Mean monthly income. Aggregate-only, groups of at least 5 employees."
+    synonyms: [average salary, avg salary, average pay, mean income, compensation]
+    sql: "AVG(p.monthly_income)"
+    from: |
+      hr.employee e
+      JOIN hr.pay p ON p.emp_id = e.emp_id
+    where: null
+    time_column: null
+
+# Terms whose meaning is ambiguous. blocking=true -> ask; otherwise apply default and state it.
+ambiguous_terms:
+  top:
+    question: "Rank by which measure?"
+    options: [net_revenue_usd, order_count, gmv_usd]
+    blocking: true
+  best:
+    question: "Best by which measure?"
+    options: [net_revenue_usd, order_count, avg_review_score]
+    blocking: true
+  sales:
+    question: "By 'sales' do you mean net revenue, GMV or number of orders?"
+    options: [net_revenue_usd, gmv_usd, order_count]
+    default: net_revenue_usd
+    blocking: false
+  performance:
+    question: "Which performance measure?"
+    options: [net_revenue_usd, order_count, avg_review_score, late_delivery_rate]
+    blocking: true
+  customers:
+    question: "Count unique people or customer accounts?"
+    options: [active_customers]
+    default: active_customers
+    blocking: false
+
+# Relative time expressions. Resolved deterministically against defaults.as_of_date.
+time_expressions:
+  - {pattern: "last quarter", resolves_to: previous_complete_quarter}
+  - {pattern: "this quarter", resolves_to: current_quarter_to_date}
+  - {pattern: "last year", resolves_to: previous_complete_year}
+  - {pattern: "this year", resolves_to: current_year_to_date}
+  - {pattern: "ytd", resolves_to: current_year_to_date}
+  - {pattern: "year to date", resolves_to: current_year_to_date}
+  - {pattern: "last month", resolves_to: previous_complete_month}
+  - {pattern: "this month", resolves_to: current_month_to_date}
+  - {pattern: "last 12 months", resolves_to: trailing_12_months}
+  - {pattern: "last 30 days", resolves_to: trailing_30_days}

@@ -1,0 +1,75 @@
+# Access policy (policy as code). Enforced by sqlagent/guardrails, never by the LLM.
+#
+# sensitivity actions: allow | mask | deny
+#   mask methods are per class below; deny = column cannot be referenced anywhere.
+# row_filters: SQL predicate on the table's own columns; {regions} expands to the
+#   caller's region list from the identity provider (never from the prompt).
+# aggregate_only: tables that may only be read through aggregates, with a minimum
+#   number of distinct entities per group (k-anonymity).
+
+version: 1
+statement:
+  allowed_roots: [select, union, intersect, except]
+  denied_functions: [read_csv, read_csv_auto, read_parquet, read_json, read_json_auto, read_text, read_blob,
+                     glob, getenv, current_setting, duckdb_settings, duckdb_tables, duckdb_columns,
+                     duckdb_databases, duckdb_functions, pragma_table_info, query, query_table, sniff_csv,
+                     parquet_scan, parquet_metadata, iceberg_scan, delta_scan, sqlite_scan, postgres_scan]
+  max_attempts: 3
+
+masking:
+  pii_direct: redact          # '***' literal
+  free_text: redact
+  pii_sensitive: redact
+
+roles:
+  admin:            # internal: eval oracle and data stewards only
+    description: "Unrestricted read for data stewards"
+    schemas: ["*"]
+    sensitivity: {pii_direct: allow, pii_sensitive: allow, free_text: allow}
+    max_rows: 100000
+    timeout_s: 60
+
+  exec:
+    description: "Executive: all commercial data, all regions; customer PII masked"
+    schemas: [sales, crm, product, ops, cx, finance, ref]
+    sensitivity: {pii_direct: mask, pii_sensitive: deny, free_text: allow}
+    max_rows: 5000
+    timeout_s: 30
+
+  regional_mgr:
+    description: "Regional manager: commercial data for own regions only; no PII"
+    schemas: [sales, crm, product, ops, cx, finance, ref]
+    sensitivity: {pii_direct: deny, pii_sensitive: deny, free_text: mask}
+    row_filters:
+      crm.CUST_MSTR_V2: "cust_state IN (SELECT state_cd FROM ref.region WHERE region_cd IN ({regions}))"
+      sales.ord_hdr: >-
+        cust_id IN (SELECT cust_id FROM crm."CUST_MSTR_V2" WHERE is_current
+        AND cust_state IN (SELECT state_cd FROM ref.region WHERE region_cd IN ({regions})))
+      sales.ord_line: >-
+        ord_id IN (SELECT h.ord_id FROM sales.ord_hdr h JOIN crm."CUST_MSTR_V2" c ON c.cust_id = h.cust_id
+        AND c.is_current WHERE c.cust_state IN (SELECT state_cd FROM ref.region WHERE region_cd IN ({regions})))
+      sales.pmt: >-
+        ord_id IN (SELECT h.ord_id FROM sales.ord_hdr h JOIN crm."CUST_MSTR_V2" c ON c.cust_id = h.cust_id
+        AND c.is_current WHERE c.cust_state IN (SELECT state_cd FROM ref.region WHERE region_cd IN ({regions})))
+      cx.review: >-
+        ord_id IN (SELECT h.ord_id FROM sales.ord_hdr h JOIN crm."CUST_MSTR_V2" c ON c.cust_id = h.cust_id
+        AND c.is_current WHERE c.cust_state IN (SELECT state_cd FROM ref.region WHERE region_cd IN ({regions})))
+      ops.seller: "seller_state IN (SELECT state_cd FROM ref.region WHERE region_cd IN ({regions}))"
+    max_rows: 1000
+    timeout_s: 30
+
+  analyst:
+    description: "Business analyst: commercial data, all regions; no PII, no free text"
+    schemas: [sales, crm, product, ops, cx, finance, ref]
+    sensitivity: {pii_direct: deny, pii_sensitive: deny, free_text: deny}
+    max_rows: 1000
+    timeout_s: 30
+
+  hr_analyst:
+    description: "People analytics: HR data; names/ids masked; pay aggregate-only (k>=5)"
+    schemas: [hr, ref]
+    sensitivity: {pii_direct: mask, pii_sensitive: allow, free_text: deny}
+    aggregate_only:
+      hr.pay: {min_group_size: 5, entity_key: emp_id}
+    max_rows: 1000
+    timeout_s: 30

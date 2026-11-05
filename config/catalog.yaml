@@ -1,0 +1,247 @@
+# Halcyon Group data catalog.
+# Semantics only: column TYPES are read from the warehouse at startup, and
+# tests/test_catalog.py fails if this file and the warehouse disagree.
+#
+# sensitivity classes: public | internal | pii_direct | pii_sensitive | free_text
+# table rules:
+#   default_filter       - always applied by the policy rewriter (all roles)
+#   required_filter_any  - query must filter/join on at least one of these columns (correctable)
+#   deprecated/replaced_by
+# joins: keys = [this_table_column, other_table_column]
+#   size_class           - small | medium | large
+
+version: 1
+tables:
+  sales.ord_hdr:
+    description: "Order header, one row per customer order (Olist marketplace). Timestamps are Sao Paulo local time without a time zone."
+    owner: sales-data@halcyon.example
+    size_class: medium
+    synonyms: [orders, order, purchases, transactions, sales orders]
+    default_filter: "is_deleted = FALSE"
+    columns:
+      ord_id: {description: "Order identifier (32-char hex)", sensitivity: internal}
+      cust_id: {description: "Per-order customer key. Joins crm.CUST_MSTR_V2.cust_id. NOT a person id: use cust_uid for unique customers.", sensitivity: internal}
+      ord_stat_cd: {description: "Order status: delivered, shipped, canceled, unavailable, invoiced, processing, created, approved", sensitivity: public, synonyms: [status, order status]}
+      purch_ts: {description: "Purchase timestamp. THE order date for reporting.", sensitivity: public, synonyms: [order date, purchase date, ordered at]}
+      appr_ts: {description: "Payment approval timestamp", sensitivity: public}
+      carrier_ts: {description: "Handed to carrier", sensitivity: public, synonyms: [shipped date]}
+      dlvr_ts: {description: "Delivered to customer (NULL if not delivered)", sensitivity: public, synonyms: [delivery date]}
+      est_dlvr_dt: {description: "Estimated delivery date promised at purchase", sensitivity: public, synonyms: [promised date, eta]}
+      is_deleted: {description: "Soft-delete flag. Deleted rows are removed automatically by policy.", sensitivity: internal}
+      src_sys_cd: {description: "Source system code", sensitivity: internal}
+    joins:
+      - {to: crm.CUST_MSTR_V2, keys: [cust_id, cust_id], cardinality: many_to_one, note: "filter CUST_MSTR_V2.is_current = TRUE"}
+      - {to: sales.ord_line, keys: [ord_id, ord_id], cardinality: one_to_many}
+      - {to: sales.pmt, keys: [ord_id, ord_id], cardinality: one_to_many}
+      - {to: cx.review, keys: [ord_id, ord_id], cardinality: one_to_many}
+
+  sales.ord_line:
+    description: "Order line items. Amounts in BRL (local currency). One row per item unit."
+    owner: sales-data@halcyon.example
+    size_class: medium
+    synonyms: [order items, line items, items sold, products sold]
+    columns:
+      ord_id: {description: "Order id", sensitivity: internal}
+      line_no: {description: "Line sequence within the order", sensitivity: internal}
+      prod_id: {description: "Product id", sensitivity: internal}
+      seller_id: {description: "Seller id", sensitivity: internal}
+      ship_lmt_ts: {description: "Seller shipping deadline", sensitivity: public}
+      price_lcl: {description: "Item price in local currency (BRL), excluding freight", sensitivity: internal, synonyms: [price, item price, amount]}
+      frt_lcl: {description: "Freight charged in local currency (BRL)", sensitivity: internal, synonyms: [freight, shipping cost]}
+      ccy_cd: {description: "Currency code of *_lcl amounts (always BRL)", sensitivity: public}
+    joins:
+      - {to: product.prod, keys: [prod_id, prod_id], cardinality: many_to_one}
+      - {to: ops.seller, keys: [seller_id, seller_id], cardinality: many_to_one}
+
+  sales.pmt:
+    description: "Payments. An order can have several payment rows (installments, vouchers); summing with order lines double-counts."
+    owner: finance-data@halcyon.example
+    size_class: medium
+    synonyms: [payments, payment methods, installments]
+    columns:
+      ord_id: {description: "Order id", sensitivity: internal}
+      pmt_seq: {description: "Payment sequence within order", sensitivity: internal}
+      pmt_type_cd: {description: "credit_card, boleto, voucher, debit_card", sensitivity: public, synonyms: [payment type, payment method]}
+      n_inst: {description: "Number of installments", sensitivity: public, synonyms: [installments]}
+      pmt_amt_lcl: {description: "Payment amount in BRL", sensitivity: internal, synonyms: [payment value]}
+      ccy_cd: {description: "Currency code (BRL)", sensitivity: public}
+
+  crm.CUST_MSTR_V2:
+    description: "Customer master, SCD type 2: one row per customer version. Filter is_current = TRUE for current attributes, or use valid_from/valid_to for point-in-time."
+    owner: crm-data@halcyon.example
+    size_class: medium
+    synonyms: [customers, customer, clients, client, accounts, buyers, shoppers]
+    required_filter_any: [is_current, valid_from, valid_to]
+    columns:
+      cust_sk: {description: "Surrogate key of the version row", sensitivity: internal}
+      cust_id: {description: "Per-order customer key (joins sales.ord_hdr.cust_id)", sensitivity: internal}
+      cust_uid: {description: "Unique person id. Use for counting unique customers.", sensitivity: internal, synonyms: [unique customer]}
+      cust_nm: {description: "Customer full name", sensitivity: pii_direct, synonyms: [customer name, name]}
+      email: {description: "Email address", sensitivity: pii_direct}
+      phone: {description: "Phone number", sensitivity: pii_direct}
+      cpf: {description: "Brazilian taxpayer id (CPF)", sensitivity: pii_direct, synonyms: [tax id, national id]}
+      cust_zip5: {description: "5-digit zip prefix", sensitivity: internal, synonyms: [zip, postal code]}
+      cust_city: {description: "City (lowercase)", sensitivity: public, synonyms: [city]}
+      cust_state: {description: "State code, e.g. SP. Joins ref.region.state_cd", sensitivity: public, synonyms: [state, uf]}
+      valid_from: {description: "Version valid from (inclusive)", sensitivity: internal}
+      valid_to: {description: "Version valid to (exclusive); 9999-12-31 if current", sensitivity: internal}
+      is_current: {description: "TRUE for the current version", sensitivity: internal}
+    joins:
+      - {to: ref.region, keys: [cust_state, state_cd], cardinality: many_to_one}
+
+  crm.cust_mstr:
+    description: "LEGACY customer snapshot from Feb 2018. Stale and incomplete."
+    owner: crm-data@halcyon.example
+    size_class: medium
+    deprecated: true
+    replaced_by: crm.CUST_MSTR_V2
+    synonyms: [customers legacy]
+    columns:
+      CUST_ID: {description: "Customer key", sensitivity: internal}
+      CUST_CITY: {description: "City", sensitivity: public}
+      CUST_ST: {description: "State", sensitivity: public}
+      SNAPSHOT_DT: {description: "Snapshot date", sensitivity: internal}
+
+  product.prod:
+    description: "Product master. Category names are Portuguese; join product.cat_xlate for English."
+    owner: catalog-data@halcyon.example
+    size_class: small
+    synonyms: [products, product, sku, items]
+    columns:
+      prod_id: {description: "Product id", sensitivity: internal}
+      cat_nm_pt: {description: "Category name in Portuguese, e.g. cama_mesa_banho. NULL if uncategorised.", sensitivity: public}
+      name_len: {description: "Length of product name text", sensitivity: public}
+      desc_len: {description: "Length of description text", sensitivity: public}
+      photo_qty: {description: "Number of photos", sensitivity: public}
+      wt_g: {description: "Weight in grams; -1 means unknown (legacy sentinel)", sensitivity: public, synonyms: [weight]}
+      len_cm: {description: "Length cm", sensitivity: public}
+      ht_cm: {description: "Height cm", sensitivity: public}
+      wd_cm: {description: "Width cm", sensitivity: public}
+    joins:
+      - {to: product.cat_xlate, keys: [cat_nm_pt, cat_nm_pt], cardinality: many_to_one}
+
+  product.cat_xlate:
+    description: "Category translation Portuguese -> English"
+    owner: catalog-data@halcyon.example
+    size_class: small
+    synonyms: [category, categories, product category]
+    columns:
+      cat_nm_pt: {description: "Portuguese category name", sensitivity: public}
+      cat_nm_en: {description: "English category name, e.g. bed_bath_table, health_beauty", sensitivity: public, synonyms: [category]}
+
+  ops.seller:
+    description: "Marketplace sellers"
+    owner: ops-data@halcyon.example
+    size_class: small
+    synonyms: [sellers, merchants, vendors, suppliers]
+    columns:
+      seller_id: {description: "Seller id", sensitivity: internal}
+      seller_zip5: {description: "Seller zip prefix", sensitivity: internal}
+      seller_city: {description: "Seller city", sensitivity: public}
+      seller_state: {description: "Seller state code; 'N/A' if unknown (legacy sentinel)", sensitivity: public}
+    joins:
+      - {to: ref.region, keys: [seller_state, state_cd], cardinality: many_to_one}
+
+  ops.geo:
+    description: "Zip-prefix geolocation points (very large; several points per zip)."
+    owner: ops-data@halcyon.example
+    size_class: large
+    synonyms: [geolocation, coordinates, lat long]
+    required_filter_any: [geo_state, geo_zip5, geo_city]
+    columns:
+      geo_zip5: {description: "Zip prefix", sensitivity: internal}
+      lat: {description: "Latitude", sensitivity: internal}
+      lng: {description: "Longitude", sensitivity: internal}
+      geo_city: {description: "City", sensitivity: public}
+      geo_state: {description: "State code", sensitivity: public}
+
+  cx.review:
+    description: "Customer reviews of orders (score 1-5, optional free text in Portuguese)"
+    owner: cx-data@halcyon.example
+    size_class: medium
+    synonyms: [reviews, ratings, feedback, satisfaction, nps]
+    columns:
+      review_id: {description: "Review id", sensitivity: internal}
+      ord_id: {description: "Order id", sensitivity: internal}
+      score: {description: "Review score 1-5", sensitivity: public, synonyms: [rating, stars]}
+      title: {description: "Review title (free text)", sensitivity: free_text}
+      comment_txt: {description: "Review comment (free text; may contain personal data)", sensitivity: free_text}
+      created_dt: {description: "Review creation date", sensitivity: public}
+      answered_ts: {description: "When the survey was answered", sensitivity: public}
+
+  hr.employee:
+    description: "Employees (one row per employee)"
+    owner: people-data@halcyon.example
+    size_class: small
+    synonyms: [employees, staff, workforce, people, headcount]
+    columns:
+      emp_id: {description: "Employee number", sensitivity: internal}
+      emp_nm: {description: "Employee full name", sensitivity: pii_direct}
+      national_id: {description: "National id (CPF)", sensitivity: pii_direct}
+      gender: {description: "Gender", sensitivity: internal}
+      age: {description: "Age in years", sensitivity: internal}
+      marital_stat: {description: "Marital status", sensitivity: internal}
+      dept_nm: {description: "Department: Sales, Research & Development, Human Resources", sensitivity: public, synonyms: [department]}
+      job_role: {description: "Job role", sensitivity: public}
+      job_lvl: {description: "Job level 1-5", sensitivity: internal}
+      edu_field: {description: "Education field", sensitivity: internal}
+      work_state: {description: "Work location state code", sensitivity: public}
+      hire_dt: {description: "Hire date", sensitivity: internal}
+      is_attrited: {description: "TRUE if the employee has left", sensitivity: internal, synonyms: [attrition, left, churned]}
+      overtime_flg: {description: "Works overtime", sensitivity: internal}
+      perf_rating: {description: "Performance rating 1-4", sensitivity: pii_sensitive}
+    joins:
+      - {to: hr.pay, keys: [emp_id, emp_id], cardinality: one_to_one}
+      - {to: ref.region, keys: [work_state, state_cd], cardinality: many_to_one}
+
+  hr.pay:
+    description: "Current compensation per employee (USD). Aggregate-only, minimum group size 5."
+    owner: people-data@halcyon.example
+    size_class: small
+    synonyms: [salary, salaries, compensation, pay, income, wages]
+    columns:
+      emp_id: {description: "Employee number", sensitivity: internal}
+      monthly_income: {description: "Monthly income (USD)", sensitivity: pii_sensitive, synonyms: [salary, income]}
+      hourly_rate: {description: "Hourly rate (USD)", sensitivity: pii_sensitive}
+      pct_salary_hike: {description: "Last salary increase %", sensitivity: pii_sensitive, synonyms: [raise]}
+      stock_opt_lvl: {description: "Stock option level 0-3", sensitivity: pii_sensitive}
+      eff_dt: {description: "Effective date", sensitivity: internal}
+
+  finance.fx_rate_daily:
+    description: "Daily FX rates BRL->USD (ECB via Frankfurter; weekends carried forward). Convert: amount_lcl * rate."
+    owner: finance-data@halcyon.example
+    size_class: small
+    synonyms: [fx, exchange rate, currency conversion]
+    columns:
+      rate_dt: {description: "Rate date", sensitivity: public}
+      from_ccy: {description: "Source currency (BRL)", sensitivity: public}
+      to_ccy: {description: "Target currency (USD)", sensitivity: public}
+      rate: {description: "Units of to_ccy per 1 from_ccy", sensitivity: public}
+      is_filled: {description: "TRUE if carried forward from the last business day", sensitivity: public}
+
+  finance.fiscal_cal:
+    description: "Calendar with fiscal attributes. Fiscal year starts 1 April and is named by the year it ends (Apr 2018 = FY2019 Q1)."
+    owner: finance-data@halcyon.example
+    size_class: small
+    synonyms: [calendar, fiscal calendar, dates]
+    columns:
+      cal_dt: {description: "Calendar date", sensitivity: public}
+      cal_yr: {description: "Calendar year", sensitivity: public}
+      cal_qtr: {description: "Calendar quarter 1-4", sensitivity: public}
+      cal_mo: {description: "Calendar month 1-12", sensitivity: public}
+      fiscal_yr: {description: "Fiscal year", sensitivity: public}
+      fiscal_qtr: {description: "Fiscal quarter 1-4", sensitivity: public}
+      fiscal_mo: {description: "Fiscal month 1-12 (April = 1)", sensitivity: public}
+      fiscal_qtr_label: {description: "e.g. FY2019-Q1", sensitivity: public}
+      is_weekend: {description: "Saturday or Sunday", sensitivity: public}
+
+  ref.region:
+    description: "Brazilian states and macro-regions (N, NE, CO, SE, S)."
+    owner: ref-data@halcyon.example
+    size_class: small
+    synonyms: [region, regions, states, territory]
+    columns:
+      state_cd: {description: "State code, e.g. SP", sensitivity: public}
+      state_nm: {description: "State name", sensitivity: public}
+      region_cd: {description: "Region code: N, NE, CO, SE, S", sensitivity: public}
+      region_nm: {description: "Region name: North, Northeast, Center-West, Southeast, South", sensitivity: public}
