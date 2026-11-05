@@ -1,12 +1,14 @@
 """Runtime settings (env vars prefixed SQLAGENT_, or a .env file)."""
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ROOT = Path(__file__).resolve().parents[1]
+# Project root holding config/ and data/. Override with SQLAGENT_HOME when installed as a package.
+ROOT = Path(os.environ.get("SQLAGENT_HOME", Path(__file__).resolve().parents[1]))
 
 
 class Settings(BaseSettings):

@@ -1,0 +1,9 @@
+# Development identity store: bearer token -> user. Stands in for an OIDC/JWT identity provider.
+# In production replace sqlagent/api.py:resolve_user with JWT validation; the rest is unchanged.
+# Tokens here are for local development only.
+tokens:
+  dev-exec-token:     {user_id: ana.exec,    role: exec}
+  dev-mgr-se-token:   {user_id: bruno.se,    role: regional_mgr, regions: [SE]}
+  dev-mgr-s-token:    {user_id: carla.south, role: regional_mgr, regions: [S]}
+  dev-analyst-token:  {user_id: diego.bi,    role: analyst}
+  dev-hr-token:       {user_id: eva.people,  role: hr_analyst}
