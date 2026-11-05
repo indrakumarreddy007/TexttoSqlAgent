@@ -27,13 +27,20 @@ Get the data. Use real Kaggle data with a token in `~/.kaggle/kaggle.json`:
 python setup/download_kaggle.py
 ```
 
+If Kaggle is blocked on your network, download the same files from pinned GitHub mirrors (each
+file is SHA-256 verified and matches the Kaggle row counts):
+
+```bash
+python setup/download_kaggle.py --source github-mirror
+```
+
 Or, offline or in CI, generate seeded data with the same schemas:
 
 ```bash
 python setup/make_sample_data.py
 ```
 
-Build the warehouse (about 5 seconds for the sample data, under a minute for the Kaggle data):
+Build the warehouse (about 5 seconds for the sample data, about 12 seconds for the full Kaggle data):
 
 ```bash
 python setup/build_warehouse.py
