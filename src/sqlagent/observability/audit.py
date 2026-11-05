@@ -38,7 +38,7 @@ class AuditLogger:
             "latency_ms": resp.latency_ms,
             "trace": state.get("trace", []),
             "prompt_version": prompt_version,
-            "llm": f"{settings.llm_provider}:{settings.llm_model}",
+            "llm": f"{settings.llm_provider}:{settings.resolved_llm_model}",
         }
         line = json.dumps(record, default=str)
         with self._lock, self.path.open("a", encoding="utf-8") as f:

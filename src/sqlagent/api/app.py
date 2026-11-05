@@ -17,7 +17,6 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-import yaml
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -25,10 +24,10 @@ from pydantic import BaseModel, Field
 from sqlagent.agent.service import Agent
 from sqlagent.bootstrap import build_agent
 from sqlagent.config import ROOT, get_settings
+from sqlagent.core.identity import describe, load_dev_users
 from sqlagent.core.schemas import AgentResponse, GuardrailResult, UserContext
 
 app = FastAPI(title="Halcyon SQL Copilot", version="0.1.0")
-USERS_PATH = ROOT / "config" / "users.yaml"
 
 
 class QueryRequest(BaseModel):
@@ -45,15 +44,11 @@ def get_agent() -> Agent:
     return build_agent()
 
 
-@lru_cache
-def _tokens(path: Path = USERS_PATH) -> dict[str, UserContext]:
-    doc = yaml.safe_load(path.read_text())
-    return {tok: UserContext(**u) for tok, u in doc["tokens"].items()}
 
 
 def resolve_user(authorization: str = Header(default="")) -> UserContext:
     scheme, _, token = authorization.partition(" ")
-    user = _tokens().get(token) if scheme.lower() == "bearer" else None
+    user = load_dev_users().get(token) if scheme.lower() == "bearer" else None
     if user is None:
         raise HTTPException(status_code=401, detail="invalid or missing bearer token")
     return user
@@ -62,13 +57,6 @@ def resolve_user(authorization: str = Header(default="")) -> UserContext:
 STATIC = Path(__file__).resolve().parent / "static"
 
 
-def _scope(u: UserContext) -> tuple[str, str]:
-    labels = {"exec": "Executive", "regional_mgr": "Regional manager", "analyst": "Business analyst",
-              "hr_analyst": "HR analyst", "admin": "Data steward"}
-    scopes = {"exec": "all regions · customer PII masked", "analyst": "all regions · no PII",
-              "hr_analyst": "HR only · names masked · pay aggregated (min 5)", "admin": "unrestricted"}
-    scope = f"regions {', '.join(u.regions) or 'none'} · no PII" if u.role == "regional_mgr" else scopes.get(u.role, "")
-    return labels.get(u.role, u.role), scope
 
 
 @app.get("/", include_in_schema=False)
@@ -86,7 +74,7 @@ def explorer() -> FileResponse:
 
 @app.get("/v1/me")
 def me(user: UserContext = Depends(resolve_user)) -> dict:
-    label, scope = _scope(user)
+    label, scope = describe(user)
     return {**user.model_dump(), "label": label, "scope": scope}
 
 
@@ -95,8 +83,8 @@ def dev_identities() -> list[dict]:
     if not get_settings().dev_mode:
         raise HTTPException(status_code=404, detail="not found")
     out = []
-    for tok, u in _tokens().items():
-        label, scope = _scope(u)
+    for tok, u in load_dev_users().items():
+        label, scope = describe(u)
         out.append({"token": tok, **u.model_dump(), "label": label, "scope": scope})
     return out
 

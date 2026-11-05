@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # LLM: "ollama" (default, free/local), "anthropic", "openai" (any OpenAI-compatible, e.g. Groq)
     llm_provider: str = "ollama"
-    llm_model: str = "qwen2.5-coder:7b"
+    llm_model: str | None = None  # default per provider, see resolved_llm_model
     llm_base_url: str | None = None
     llm_temperature: float = 0.0
     llm_timeout_s: float = 120.0
@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     max_estimated_rows: int = 50_000_000
 
     langfuse_enabled: bool = False
+
+    @property
+    def resolved_llm_model(self) -> str:
+        if self.llm_model:
+            return self.llm_model
+        defaults = {"ollama": "qwen2.5-coder:7b", "anthropic": "claude-opus-5-5",
+                    "openai": "llama-3.3-70b-versatile"}
+        return defaults.get(self.llm_provider.lower(), "qwen2.5-coder:7b")
     # Dev mode exposes the demo identities from config/users.yaml to the web UI's user picker.
     # Set SQLAGENT_DEV_MODE=false in production, where identity comes from your SSO.
     dev_mode: bool = True

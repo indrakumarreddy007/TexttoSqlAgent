@@ -37,3 +37,22 @@ def test_trend_without_time_grouping_is_flagged():
     assert codes(sql, intent="trend", grain="month") == ["V070"]
     ok = "SELECT date_trunc('month', h.purch_ts), COUNT(*) FROM sales.ord_hdr h GROUP BY 1 ORDER BY 1"
     assert codes(ok, intent="trend", grain="month") == []
+
+
+def test_mismatched_key_join_is_flagged():
+    pairs = {frozenset(("cust_id", "cust_id")), frozenset(("ord_id", "ord_id"))}
+    bad = ("SELECT c.cust_uid, COUNT(*) FROM sales.ord_hdr h JOIN crm.\"CUST_MSTR_V2\" c "
+           "ON c.cust_id = h.ord_id AND c.is_current GROUP BY 1")
+    assert "V073" in [v.code for v in check_conformance(bad, QualifiedRequest(dimensions=["customer"]), pairs)]
+    good = bad.replace("h.ord_id", "h.cust_id")
+    assert check_conformance(good, QualifiedRequest(dimensions=["customer"]), pairs) == []
+
+
+def test_certified_metric_filter_must_be_used():
+    filters = {"net_revenue_usd": "h.ord_stat_cd NOT IN ('canceled', 'unavailable')"}
+    spec = QualifiedRequest(metrics=["net_revenue_usd"])
+    drifted = ("SELECT SUM(l.price_lcl) FROM sales.ord_hdr h JOIN sales.ord_line l ON l.ord_id = h.ord_id "
+               "WHERE h.ord_stat_cd = 'delivered'")
+    assert "V074" in [v.code for v in check_conformance(drifted, spec, None, filters)]
+    ok = drifted.replace("h.ord_stat_cd = 'delivered'", "x.ord_stat_cd NOT IN ('canceled','unavailable')")
+    assert check_conformance(ok, spec, None, filters) == []

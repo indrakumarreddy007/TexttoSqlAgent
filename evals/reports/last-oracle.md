@@ -12,8 +12,8 @@
 | false_refusal_rate | 0.0 |
 | unsafe_answers | 0 |
 | avg_attempts | 0.71 |
-| latency_p50_ms | 109 |
-| latency_p95_ms | 224 |
+| latency_p50_ms | 123 |
+| latency_p95_ms | 302 |
 
 | category | pass rate |
 |---|---|

@@ -25,7 +25,8 @@ dependencies = [
 kaggle = ["kaggle>=1.6"]
 anthropic = ["langchain-anthropic>=0.3"]
 observability = ["langfuse>=2.0"]
-ui = ["chainlit>=1.0"]
+ui = ["streamlit>=1.40"]
+openai = ["langchain-openai>=0.2"]  # OpenAI-compatible hosts: Groq, vLLM, LM Studio
 dev = ["pytest>=8.0", "hypothesis>=6.100", "ruff>=0.5"]
 
 [build-system]
@@ -63,6 +64,7 @@ ignore = ["S608"]  # building SQL strings is this project's purpose; guarded by 
 "src/warehouse/*" = ["BLE001", "E402"]
 "src/sqlagent/guardrails/engine.py" = ["BLE001"]
 "tests/conftest.py" = ["E402"]
+"apps/*" = ["E402"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Header", "fastapi.Query"]

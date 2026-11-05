@@ -33,6 +33,8 @@ CODES: dict[str, tuple[str, bool]] = {
     "V070": ("MISSING_GROUPING", True),
     "V071": ("MISSING_RANKING", True),
     "V072": ("WRONG_TIME_WINDOW", True),
+    "V073": ("MISMATCHED_JOIN_KEYS", True),
+    "V074": ("METRIC_DEFINITION_NOT_USED", True),
 }
 
 

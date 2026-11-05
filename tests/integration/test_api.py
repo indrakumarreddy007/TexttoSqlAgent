@@ -11,12 +11,15 @@ from sqlagent.api import app as api
 from sqlagent.config import Settings
 from sqlagent.llm.client import ScriptedLLM
 
+ORDERS_SQL = ("SELECT COUNT(DISTINCT h.ord_id) AS orders FROM sales.ord_hdr h "
+              "WHERE h.ord_stat_cd NOT IN ('canceled', 'unavailable')")
+
 
 @pytest.fixture
 def client(warehouse, catalog, glossary, policy, engine, executor):
     llm = ScriptedLLM({
         "QualifiedRequest": [{"metrics": ["order_count"]}],
-        "CandidateSQL": [{"sql": "SELECT COUNT(DISTINCT h.ord_id) AS orders FROM sales.ord_hdr h"}],
+        "CandidateSQL": [{"sql": ORDERS_SQL}],
     })
     svc = Services(Settings(warehouse_path=warehouse), catalog, glossary, policy, engine,
                    Retriever(catalog, glossary), Resolver(glossary), executor, llm)

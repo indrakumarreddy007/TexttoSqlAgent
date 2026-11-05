@@ -229,7 +229,7 @@ def main() -> None:
               f"{r.get('exec_detail', '')[:70]}", flush=True)
 
     summary = summarize(results)
-    meta = {"mode": args.mode, "llm": "oracle" if args.mode == "oracle" else f"{s.llm_provider}:{s.llm_model}",
+    meta = {"mode": args.mode, "llm": "oracle" if args.mode == "oracle" else f"{s.llm_provider}:{s.resolved_llm_model}",
             "ts": datetime.now(UTC).isoformat(timespec="seconds"), "cases_file": str(args.cases)}
     regressions = []
     if args.baseline and args.baseline.exists():

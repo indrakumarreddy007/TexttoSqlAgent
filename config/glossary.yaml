@@ -39,10 +39,10 @@ metrics:
     time_column: h.purch_ts
 
   order_count:
-    label: "Orders"
+    label: "Number of orders"
     owner: sales-data@halcyon.example
     description: "Distinct orders, excluding canceled/unavailable."
-    synonyms: [orders, number of orders, order volume, order count]
+    synonyms: [number of orders, how many orders, order volume, order count]
     sql: "COUNT(DISTINCT h.ord_id)"
     from: "sales.ord_hdr h"
     where: "h.ord_stat_cd NOT IN ('canceled', 'unavailable')"

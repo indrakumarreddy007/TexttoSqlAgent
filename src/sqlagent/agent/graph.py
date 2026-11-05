@@ -150,6 +150,9 @@ def route_after_execute(state: AgentState, max_attempts: int) -> str:
 
 
 # =========================================================================== nodes
+_REGION_WORDS = re.compile(r"\bregions?\b|southeast|northeast|north|south|center-west|\b(SE|NE|CO|N|S)\b")
+_PRIVACY_WORDS = re.compile(r"personal|privacy|private|pii|sensitive|confidential|identif|names?\b|e-?mail",
+                            re.IGNORECASE)
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 _CPF = re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b")
 _PHONE = re.compile(r"\(?\+?\d{2}\)?\s?\d{4,5}-?\d{4}\b")
@@ -158,6 +161,9 @@ _PHONE = re.compile(r"\(?\+?\d{2}\)?\s?\d{4,5}-?\d{4}\b")
 def build_graph(svc: Services) -> StateGraph:
     s = svc.settings
     max_attempts = s.max_sql_attempts
+    join_pairs = {frozenset((j.left_col.lower(), j.right_col.lower()))
+                  for t in svc.catalog.tables.values() for j in t.joins}
+    metric_filters = {m.id: m.where for m in svc.glossary.metrics.values() if m.where}
 
     def user_of(state: AgentState) -> UserContext:
         return UserContext.model_validate(state["user"])
@@ -206,7 +212,13 @@ def build_graph(svc: Services) -> StateGraph:
             return {}
         spec = QualifiedRequest.model_validate(state["spec"])
         if spec.out_of_scope_reason:
-            return {"status": "refused", "message": f"I can't answer this: {spec.out_of_scope_reason}"}
+            if _PRIVACY_WORDS.search(spec.out_of_scope_reason):
+                # The input guard already cleared this question, and the guardrail engine blocks any
+                # restricted column at SQL time, so an LLM privacy refusal here is a false positive.
+                spec.out_of_scope_reason = None
+                spec.assumptions.append("People are identified by anonymous ids; personal details are not shown.")
+            else:
+                return {"status": "refused", "message": f"I can't answer this: {spec.out_of_scope_reason}"}
         question = state["question"]
         matched = svc.retriever.match_metrics(full_question(state))
         spec = svc.resolver.resolve(spec, question, state.get("clarifications", []),
@@ -222,6 +234,12 @@ def build_graph(svc: Services) -> StateGraph:
                     if mid and mid not in spec.metrics:
                         spec.metrics.insert(0, mid)
         role = svc.policy.role(state["user"]["role"])
+        user = user_of(state)
+        if role.row_filters and user.regions and not _REGION_WORDS.search(question):
+            kept = [f for f in spec.filters if not _REGION_WORDS.search(f)]
+            if len(kept) != len(spec.filters):
+                spec.filters = kept
+                spec.assumptions.append(f"Limited to your regions ({', '.join(user.regions)}) by your access policy.")
         ctx = svc.retriever.retrieve(full_question(state), role, s.retrieval_top_k_tables,
                                      extra_metrics=spec.metrics)
         return {"spec": spec.model_dump(mode="json"), "context": ctx.__dict__}
@@ -267,7 +285,8 @@ def build_graph(svc: Services) -> StateGraph:
         r = svc.engine.check(state["candidate_sql"], user_of(state))
         violations = list(r.violations)
         if r.allowed and state.get("spec"):
-            violations = check_conformance(state["candidate_sql"], QualifiedRequest.model_validate(state["spec"]))
+            violations = check_conformance(state["candidate_sql"], QualifiedRequest.model_validate(state["spec"]),
+                                           join_pairs, metric_filters)
         ok = r.allowed and not violations
         return {"guardrail": r.model_dump(), "enforced_sql": r.enforced_sql if ok else None,
                 "violations": [v.model_dump() for v in violations]}

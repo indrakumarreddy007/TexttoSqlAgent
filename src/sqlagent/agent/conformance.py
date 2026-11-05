@@ -12,8 +12,32 @@ from sqlglot import exp
 from sqlagent.core.schemas import QualifiedRequest, Violation
 from sqlagent.guardrails.codes import violation
 
+_KEY_SUFFIXES = ("_id", "_uid", "_sk")
 
-def check_conformance(sql: str, spec: QualifiedRequest) -> list[Violation]:
+
+def _is_key(name: str) -> bool:
+    return name.lower().endswith(_KEY_SUFFIXES)
+
+
+def _conditions(expr: exp.Expression) -> list[exp.Expression]:
+    """Split a predicate on AND into its conditions."""
+    if isinstance(expr, exp.And):
+        return _conditions(expr.this) + _conditions(expr.expression)
+    if isinstance(expr, exp.Paren):
+        return _conditions(expr.this)
+    return [expr]
+
+
+def _unqualified(expr: exp.Expression) -> str:
+    e = expr.copy()
+    for col in e.find_all(exp.Column):
+        col.set("table", None)
+    return e.sql(dialect="duckdb").lower().replace('"', "")
+
+
+def check_conformance(sql: str, spec: QualifiedRequest,
+                      join_pairs: set[frozenset[str]] | None = None,
+                      metric_filters: dict[str, str] | None = None) -> list[Violation]:
     try:
         tree = sqlglot.parse_one(sql, read="duckdb")
     except Exception:  # noqa: BLE001 - parse errors are reported by the guardrail engine
@@ -35,6 +59,30 @@ def check_conformance(sql: str, spec: QualifiedRequest) -> list[Violation]:
     if spec.intent == "ranking" and outer is not None and outer.args.get("order") is None:
         out.append(violation("V071", "the request is a ranking but the outer query has no ORDER BY",
                              f"ORDER BY the metric {spec.order_dir.upper()} and LIMIT {spec.limit or 10}."))
+    if join_pairs is not None:
+        for join in tree.find_all(exp.Join):
+            on = join.args.get("on")
+            for eq in on.find_all(exp.EQ) if on is not None else []:
+                left, right = eq.this, eq.expression
+                if not (isinstance(left, exp.Column) and isinstance(right, exp.Column)):
+                    continue
+                a, b = left.name.lower(), right.name.lower()
+                if a != b and _is_key(a) and _is_key(b) and frozenset((a, b)) not in join_pairs:
+                    out.append(violation("V073", f"join compares different keys {left.sql()} = {right.sql()}",
+                                         "Join on the documented key pairs listed under JOINS (usually the same "
+                                         "column name on both sides, e.g. h.cust_id = c.cust_id)."))
+    if metric_filters:
+        present = {_unqualified(c) for node in tree.find_all(exp.Where, exp.Join)
+                   for part in ([node.this] if isinstance(node, exp.Where) else [node.args.get("on")])
+                   if part is not None for c in _conditions(part)}
+        for metric in spec.metrics:
+            where = metric_filters.get(metric)
+            if not where:
+                continue
+            for cond in _conditions(sqlglot.parse_one(where, read="duckdb")):
+                if _unqualified(cond) not in present:
+                    out.append(violation("V074", f"certified metric {metric} requires the condition {cond.sql()}",
+                                         "Use the certified metric's WHERE conditions exactly as given in METRICS."))
     tw = spec.time_window
     if tw and tw.start and tw.end:
         text = tree.sql(dialect="duckdb")

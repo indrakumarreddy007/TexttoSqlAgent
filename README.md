@@ -35,6 +35,7 @@ src/
     config.py               settings (SQLAGENT_* env vars / .env)
     cli.py                  interactive CLI (sqlagent)
   warehouse/                data pipeline: download / sample / build (halcyon-warehouse)
+apps/streamlit_app.py       simple UI: question in, answer out (streamlit run)
 config/                     runtime configuration: catalog, glossary, policy, examples, dev users
 evals/
   datasets/dev.yaml         eval set: 28 cases with gold SQL and expected behaviour
@@ -44,7 +45,7 @@ tests/
   security/                 hostile-SQL corpus (release gate)
   integration/              warehouse, policy execution, graph routes, API, examples, eval harness
 scripts/                    build_data_explorer.py + templates/
-deploy/                     Dockerfile, docker-compose.yml (API + Ollama)
+deploy/                     Dockerfile (API), Dockerfile.streamlit (simple UI), docker-compose.yml
 docs/                       architecture.html, data-explorer.html, screenshots/
 .github/workflows/ci.yml    lint, unit, security, integration, oracle-eval gate, docker build
 ```
@@ -100,7 +101,25 @@ sqlagent --role regional_mgr --regions SE "who were our top customers last quart
 
 The `Makefile` has shortcuts for all of these (`make data-mirror warehouse api`).
 
-## Web UI
+## Simple UI (Streamlit)
+
+One question box and the answer: ask in plain English, get the table, with the SQL and assumptions
+one click away. The agent runs in the same process, and the app builds the warehouse itself on
+first start, so it deploys to free hosts as-is.
+
+```bash
+pip install -e ".[ui]"
+```
+
+```bash
+streamlit run apps/streamlit_app.py
+```
+
+Free hosting (Streamlit Community Cloud, Hugging Face Spaces, Azure Container Apps) and the LLM
+options for it (Groq or Gemini free tiers, Claude API, local Ollama) are in
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+## Web UI (full)
 
 In dev mode the page has a user picker with the demo identities from `config/users.yaml`, so you can
 ask the same question as different roles and compare the results. Set `SQLAGENT_DEV_MODE=false` in

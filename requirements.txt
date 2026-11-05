@@ -1,0 +1,2 @@
+# Streamlit Community Cloud / Hugging Face Spaces install this file.
+.[ui,openai,anthropic]

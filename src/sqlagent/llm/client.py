@@ -35,27 +35,38 @@ def build_chat_model(s: Settings) -> Any:
     if provider == "ollama":
         from langchain_ollama import ChatOllama
         kw = {"base_url": s.llm_base_url} if s.llm_base_url else {}
-        return ChatOllama(model=s.llm_model, temperature=s.llm_temperature, num_ctx=8192, **kw)
+        return ChatOllama(model=s.resolved_llm_model, temperature=s.llm_temperature, num_ctx=8192, **kw)
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic  # pip install .[anthropic]
-        return ChatAnthropic(model=s.llm_model, temperature=s.llm_temperature, timeout=s.llm_timeout_s,
-                             max_tokens=2048)
+        # Current Claude models reject sampling parameters (temperature) and forced tool choice, so no
+        # temperature here and structured output uses native JSON schema (see structured_method).
+        # Thinking is adaptive by default and counts toward max_tokens, hence the generous cap.
+        return ChatAnthropic(model=s.resolved_llm_model, timeout=s.llm_timeout_s, max_tokens=16000)
     if provider == "openai":
         from langchain_openai import ChatOpenAI  # any OpenAI-compatible server (Groq, vLLM, LM Studio)
         kw = {"base_url": s.llm_base_url} if s.llm_base_url else {}
-        return ChatOpenAI(model=s.llm_model, temperature=s.llm_temperature, timeout=s.llm_timeout_s, **kw)
+        return ChatOpenAI(model=s.resolved_llm_model, temperature=s.llm_temperature, timeout=s.llm_timeout_s, **kw)
     raise ValueError(f"unknown llm_provider {s.llm_provider!r}")
 
 
+def structured_method(s: Settings) -> str | None:
+    """Anthropic: native JSON-schema structured output (forced tool choice is rejected by current
+    models). OpenAI-compatible hosts such as Groq: tool calling, which more models support."""
+    return {"anthropic": "json_schema", "openai": "function_calling"}.get(s.llm_provider.lower())
+
+
 class LangChainLLM:
-    def __init__(self, chat_model: Any, callbacks: list | None = None, retries: int = 1):
+    def __init__(self, chat_model: Any, callbacks: list | None = None, retries: int = 1,
+                 structured_method: str | None = None):
         self.chat = chat_model
+        self.structured_method = structured_method
         self.callbacks = callbacks or []
         self.retries = retries
         self.usage: list[dict] = []
 
     def generate(self, schema: type[T], system: str, user: str) -> T:
-        runnable = self.chat.with_structured_output(schema, include_raw=True)
+        kw = {"method": self.structured_method} if self.structured_method else {}
+        runnable = self.chat.with_structured_output(schema, include_raw=True, **kw)
         messages = [("system", system), ("human", user)]
         last_err: Exception | None = None
         for attempt in range(self.retries + 1):

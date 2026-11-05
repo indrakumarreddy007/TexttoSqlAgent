@@ -11,6 +11,8 @@ from sqlagent.core.schemas import Status
 from sqlagent.llm.client import ScriptedLLM
 
 C = 'crm."CUST_MSTR_V2"'
+ORDERS_SQL = ("SELECT COUNT(DISTINCT h.ord_id) AS orders FROM sales.ord_hdr h "
+              "WHERE h.ord_stat_cd NOT IN ('canceled', 'unavailable')")
 REV_BY_STATE = f"""
 SELECT c.cust_state AS state, ROUND(SUM(l.price_lcl * fx.rate), 2) AS net_revenue_usd
 FROM sales.ord_hdr h
@@ -89,7 +91,8 @@ def test_self_correction_after_correctable_violation(make_agent, users):
         "CandidateSQL": [
             {"sql": "SELECT c.CUST_ST, COUNT(*) FROM crm.cust_mstr c GROUP BY 1"},       # deprecated
             {"sql": f"SELECT c.cust_state, COUNT(DISTINCT h.ord_id) AS orders FROM sales.ord_hdr h "
-                    f"JOIN {C} c ON c.cust_id = h.cust_id AND c.is_current GROUP BY 1"},
+                    f"JOIN {C} c ON c.cust_id = h.cust_id AND c.is_current "
+                    "WHERE h.ord_stat_cd NOT IN ('canceled', 'unavailable') GROUP BY 1"},
         ],
     })
     r = make_agent(llm).ask("number of orders by customer state", users["analyst"])
@@ -161,7 +164,7 @@ def test_audit_log_written(make_agent, users, tmp_path):
 
     from sqlagent.observability.audit import AuditLogger
     llm = ScriptedLLM({"QualifiedRequest": [spec(metrics=["order_count"])],
-                       "CandidateSQL": [{"sql": "SELECT COUNT(DISTINCT h.ord_id) AS orders FROM sales.ord_hdr h"}]})
+                       "CandidateSQL": [{"sql": ORDERS_SQL}]})
     agent = make_agent(llm)
     agent.audit = AuditLogger(tmp_path / "a.jsonl")
     r = agent.ask("how many orders", users["analyst"])
@@ -195,3 +198,29 @@ def test_default_term_does_not_add_metric_when_one_is_chosen(glossary):
     assert spec.metrics == ["net_revenue_usd"]
     spec = r.resolve(QualifiedRequest(), "how many customers in SP", [], set(glossary.metrics), [])
     assert spec.metrics == ["active_customers"]
+
+
+def test_llm_privacy_refusal_is_overridden_for_allowed_questions(make_agent, users):
+    """The 7B model refused 'top customers' as 'personal information' in the live UI test.
+    Privacy is enforced deterministically, so the agent proceeds (here: to the metric question)."""
+    llm = ScriptedLLM({"QualifiedRequest": [spec(intent="ranking",
+                                                 out_of_scope_reason="The request involves personal information")]})
+    r = make_agent(llm).ask("Who were our top customers last quarter?", users["mgr_se"])
+    assert r.status == Status.needs_clarification
+    assert r.clarification.questions[0].slot == "metric"
+
+
+def test_non_privacy_out_of_scope_still_refuses(make_agent, users):
+    llm = ScriptedLLM({"QualifiedRequest": [spec(out_of_scope_reason="stock prices are not in the warehouse")]})
+    r = make_agent(llm).ask("what is our share price", users["analyst"])
+    assert r.status == Status.refused
+
+
+def test_own_region_filter_is_dropped_for_regional_manager(make_agent, users):
+    llm = ScriptedLLM({
+        "QualifiedRequest": [spec(metrics=["order_count"], filters=["region = Southeast"])],
+        "CandidateSQL": [{"sql": ORDERS_SQL}],
+    })
+    r = make_agent(llm).ask("how many orders did we get", users["mgr_se"])
+    assert r.status == Status.answered
+    assert r.spec.filters == [] and any("your regions (SE)" in a for a in r.assumptions)
