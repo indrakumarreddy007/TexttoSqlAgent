@@ -88,6 +88,7 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
     <li><a href="#online">Online evals</a></li>
     <li><a href="#extend">Extensibility</a></li>
     <li><a href="#nfr">Operations and NFRs</a></li>
+    <li><a href="#status">Implementation status</a></li>
     <li><a href="#assignment">Assignment mapping</a></li>
   </ol>
 </nav>
@@ -609,7 +610,22 @@ flowchart TB
 <tr><td>Change management</td><td>Prompts, catalog and policy are versioned in git. A PR runs unit tests, the security corpus and offline evals, and posts a diff report.</td></tr>
 </tbody></table></div>
 
-<h2 id="assignment"><span class="n">11</span>Assignment mapping</h2>
+<h2 id="status"><span class="n">11</span>Implementation status</h2>
+<p>Reference implementation in <code>txt2sql-agent/</code>. Every row below was run and verified, except where marked.</p>
+<div class="tbl"><table>
+<thead><tr><th>Item</th><th>Result</th><th>State</th></tr></thead>
+<tbody>
+<tr><td>Real Kaggle data</td><td>All 10 files (Olist ×9, IBM HR) checked against SHA-256 checksums, using pinned GitHub mirrors as a fallback when Kaggle is blocked. Row counts match Kaggle exactly.</td><td><span class="pill det">done</span></td></tr>
+<tr><td>Warehouse build</td><td class="num">12 s · 99,441 orders · 112,650 order lines · 1,000,163 geolocation rows · 1,470 employees</td><td><span class="pill det">done</span></td></tr>
+<tr><td>Data invariants on real data</td><td class="num">8 / 8 pass (one current version per customer, FX rate for every order date, foreign keys, fiscal calendar)</td><td><span class="pill det">done</span></td></tr>
+<tr><td>Automated tests</td><td class="num">122 pass: security corpus (~60 hostile queries), policy execution, property test, graph routes, API contract, eval harness</td><td><span class="pill det">done</span></td></tr>
+<tr><td>Oracle eval (gold answers through the full pipeline)</td><td class="num">28 / 28 on real data · 0 unsafe answers · p95 195 ms</td><td><span class="pill det">done</span></td></tr>
+<tr><td>API</td><td>Exercised live: auth (401), row-level-security rewrite, PII refusal (V021), input guard</td><td><span class="pill det">done</span></td></tr>
+<tr><td>Live LLM eval</td><td>Needs an LLM. The build sandbox's network policy blocks the Ollama registry and Hugging Face. Run <code>python eval/run_eval.py</code> where Ollama is available.</td><td><span class="pill hard">pending</span></td></tr>
+<tr><td>CI on GitHub</td><td>Workflow is written (lint, tests, oracle-eval gate). It needs a GitHub repository to push to.</td><td><span class="pill hard">pending</span></td></tr>
+</tbody></table></div>
+
+<h2 id="assignment"><span class="n">12</span>Assignment mapping</h2>
 <p>Candidates receive the warehouse build, catalog, glossary, policy, dev eval split, grader and a starter skeleton with the interfaces above. They build steps S1–S11. The hidden split and the reference solution stay with the hiring panel.</p>
 <div class="tbl"><table>
 <thead><tr><th>Area</th><th class="num">Weight</th><th>Evidence</th></tr></thead>
