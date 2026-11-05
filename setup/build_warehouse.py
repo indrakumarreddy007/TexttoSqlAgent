@@ -90,20 +90,44 @@ def load_staging(con: duckdb.DuckDBPyConnection, raw: Path) -> str:
 
 
 # --------------------------------------------------------------------------- FX
+# Federal Reserve H.10 daily rates (BRL per USD), pinned copy from github.com/datasets/exchange-rates
+FED_H10_URL = ("https://raw.githubusercontent.com/datasets/exchange-rates/"
+               "2c93f64390781ffa082441909b6ea86a760bc214/data/daily.csv")
+
+
+def _fx_frankfurter() -> pd.DataFrame:
+    url = f"https://api.frankfurter.dev/v1/{FX_START}..{FX_END}?from=BRL&to=USD"
+    with urllib.request.urlopen(url, timeout=20) as r:
+        data = json.load(r)["rates"]
+    return pd.DataFrame({"rate_dt": pd.to_datetime(list(data)), "rate": [v["USD"] for v in data.values()]})
+
+
+def _fx_fed_h10() -> pd.DataFrame:
+    with urllib.request.urlopen(FED_H10_URL, timeout=60) as r:
+        df = pd.read_csv(r)
+    df = df[(df["Country"] == "Brazil") & df["Exchange rate"].notna()]
+    df = df[(df["Date"] >= str(FX_START)) & (df["Date"] <= str(FX_END))]
+    if len(df) < 900:
+        raise ValueError(f"too few BRL rates: {len(df)}")
+    return pd.DataFrame({"rate_dt": pd.to_datetime(df["Date"]), "rate": (1.0 / df["Exchange rate"]).round(6)})
+
+
 def fx_series(raw: Path) -> tuple[pd.DataFrame, str]:
     cache = raw / "fx" / "brl_usd.csv"
     if cache.exists():
         return pd.read_csv(cache, parse_dates=["rate_dt"]), "cache"
-    url = f"https://api.frankfurter.app/{FX_START}..{FX_END}?from=BRL&to=USD"
-    try:
+    df, source = None, None
+    for name, fetch in (("frankfurter-ecb", _fx_frankfurter), ("fed-h10", _fx_fed_h10)):
         if os.environ.get("SQLAGENT_OFFLINE"):
-            raise ConnectionError("SQLAGENT_OFFLINE set")
-        with urllib.request.urlopen(url, timeout=20) as r:
-            data = json.load(r)["rates"]
-        df = pd.DataFrame({"rate_dt": pd.to_datetime(list(data)), "rate": [v["USD"] for v in data.values()]})
-        source = "frankfurter-ecb"
-    except Exception as e:  # offline / blocked: seeded random walk in the real historical band
-        log(f"FX API unavailable ({type(e).__name__}); using seeded synthetic BRL->USD series")
+            break
+        try:
+            df, source = fetch(), name
+            log(f"FX rates from {name}: {len(df)} business days")
+            break
+        except Exception as e:
+            log(f"FX source {name} unavailable ({type(e).__name__})")
+    if df is None:  # offline / blocked: seeded random walk in the real historical band
+        log("using seeded synthetic BRL->USD series")
         rng = random.Random(42)
         days = pd.date_range(FX_START, FX_END, freq="B")
         rate, vals = 0.252, []

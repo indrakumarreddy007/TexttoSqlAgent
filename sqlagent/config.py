@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     catalog_path: Path = ROOT / "config" / "catalog.yaml"
     glossary_path: Path = ROOT / "config" / "glossary.yaml"
     policy_path: Path = ROOT / "config" / "policy.yaml"
+    examples_path: Path = ROOT / "config" / "examples.yaml"
     audit_path: Path = ROOT / "data" / "audit.jsonl"
     checkpoint_path: Path = ROOT / "data" / "checkpoints.sqlite"
 

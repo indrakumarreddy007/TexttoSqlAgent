@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "mode": "live",
+    "llm": "ollama:qwen2.5-coder:7b",
+    "ts": "2026-11-05T06:14:58+00:00",
+    "cases_file": "/home/user/txt2sql-agent/eval/cases.yaml"
+  },
+  "summary": {
+    "cases": 1,
+    "pass_rate": 0.0,
+    "behavior_accuracy": 1.0,
+    "execution_accuracy": 0.0,
+    "clarification_recall": null,
+    "over_clarification_rate": 0.0,
+    "refusal_recall": null,
+    "false_refusal_rate": 0.0,
+    "unsafe_answers": 0,
+    "avg_attempts": 1,
+    "latency_p50_ms": 121970,
+    "latency_p95_ms": 121970,
+    "by_category": {
+      "well_specified": 0.0
+    }
+  },
+  "results": [
+    {
+      "id": "ws_01",
+      "category": "well_specified",
+      "expect": "answer",
+      "behavior": "answer",
+      "first_status": "answered",
+      "final_status": "answered",
+      "asked_slots": [],
+      "attempts": 1,
+      "latency_ms": 121970,
+      "message": "net_revenue_usd = 755033.78849612680816",
+      "sql": "WITH \"net_revenue\" AS (SELECT SUM(\"l\".\"price_lcl\" * \"fx\".\"rate\") AS \"net_revenue_brl\" FROM (SELECT \"ord_id\", \"cust_id\", \"ord_stat_cd\", \"purch_ts\", \"appr_ts\", \"carrier_ts\", \"dlvr_ts\", \"est_dlvr_dt\", \"is_deleted\", \"src_sys_cd\" FROM \"sales\".\"ord_hdr\" WHERE (is_deleted = FALSE)) AS \"h\" JOIN (SELECT \"ord_id\", \"line_no\", \"prod_id\", \"seller_id\", \"ship_lmt_ts\", \"price_lcl\", \"frt_lcl\", \"ccy_cd\" FROM \"sales\".\"ord_line\") AS \"l\" ON \"l\".\"ord_id\" = \"h\".\"ord_id\" JOIN (SELECT \"rate_dt\", \"from_ccy\", \"to_ccy\", \"rate\", \"is_filled\" FROM \"finance\".\"fx_rate_daily\") AS \"fx\" ON \"fx\".\"rate_dt\" = CAST(\"h\".\"purch_ts\" AS DATE) WHERE NOT \"h\".\"ord_stat_cd\" IN ('canceled', 'unavailable') AND \"h\".\"purch_ts\" >= CAST('2017-04-01' AS TIMESTAMP) AND \"h\".\"purch_ts\" < CAST('2018-04-01' AS TIMESTAMP)) SELECT \"net_revenue\".\"net_revenue_brl\" * (SELECT \"fx_rate_daily\".\"rate\" AS \"rate\" FROM (SELECT \"rate_dt\", \"from_ccy\", \"to_ccy\", \"rate\", \"is_filled\" FROM \"finance\".\"fx_rate_daily\") AS \"fx_rate_daily\" WHERE \"fx_rate_daily\".\"rate_dt\" = CAST('2018-03-31' AS DATE)) AS \"net_revenue_usd\" FROM \"net_revenue\" AS \"net_revenue\" ORDER BY \"net_revenue_usd\" DESC LIMIT 1000",
+      "assumptions": [
+        "The question asks for total net revenue in the fiscal year 2018, which starts on April 1, 2018.",
+        "'fy2018' = FY2018 (2017-04-01 to 2018-03-31), fiscal basis, as of 2018-08-31",
+        "Amounts converted from BRL to USD at the daily rate of the order date."
+      ],
+      "behavior_ok": true,
+      "unsafe": false,
+      "exec_match": false,
+      "exec_detail": "no predicted column matches gold column 'net_revenue_usd'",
+      "pass": false
+    }
+  ]
+}

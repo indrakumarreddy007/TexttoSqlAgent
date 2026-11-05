@@ -23,6 +23,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from sqlagent.config import Settings
+from sqlagent.conformance import check_conformance
 from sqlagent.executor import ExecResult, Executor
 from sqlagent.guardrails import GuardrailEngine
 from sqlagent.input_guard import check_input
@@ -56,7 +57,9 @@ class Services:
             con.close()
         glossary = Glossary.load(s.glossary_path)
         policy = Policy.load(s.policy_path)
-        return cls(s, catalog, glossary, policy, GuardrailEngine(catalog, policy), Retriever(catalog, glossary),
+        from sqlagent.retrieval import load_examples
+        retriever = Retriever(catalog, glossary, load_examples(s.examples_path))
+        return cls(s, catalog, glossary, policy, GuardrailEngine(catalog, policy), retriever,
                    Resolver(glossary), Executor(s.warehouse_path), llm)
 
 
@@ -241,7 +244,11 @@ def build_graph(svc: Services) -> StateGraph:
             feedback = ("\nPREVIOUS ATTEMPT:\n" + (state.get("candidate_sql") or "") +
                         "\nPREVIOUS ATTEMPT VIOLATIONS:\n" + "\n".join(lines))
         spec = {k: v for k, v in state["spec"].items() if k not in ("ambiguities",)}
+        role = svc.policy.role(state["user"]["role"])
+        shots = svc.retriever.similar_examples(state["question"], role)
+        examples = "\n\n".join(f"-- Q: {e.question}\n{e.sql}" for e in shots) or "-"
         prompt = SQL_USER.format(spec=json.dumps(spec, indent=1, default=str), metric_defs=ctx["metric_defs"] or "-",
+                                 examples=examples,
                                  ddl=ctx["ddl"], joins=ctx["joins"] or "-", notes="\n".join(ctx["notes"]) or "-",
                                  feedback=feedback)
         attempts = state.get("attempts", 0) + 1
@@ -258,8 +265,12 @@ def build_graph(svc: Services) -> StateGraph:
         if state.get("status") == "error":
             return {}
         r = svc.engine.check(state["candidate_sql"], user_of(state))
-        return {"guardrail": r.model_dump(), "enforced_sql": r.enforced_sql if r.allowed else None,
-                "violations": [v.model_dump() for v in r.violations]}
+        violations = list(r.violations)
+        if r.allowed and state.get("spec"):
+            violations = check_conformance(state["candidate_sql"], QualifiedRequest.model_validate(state["spec"]))
+        ok = r.allowed and not violations
+        return {"guardrail": r.model_dump(), "enforced_sql": r.enforced_sql if ok else None,
+                "violations": [v.model_dump() for v in violations]}
 
     # ---------------------------------------------------------------- S7
     def cost_check(state: AgentState) -> dict:

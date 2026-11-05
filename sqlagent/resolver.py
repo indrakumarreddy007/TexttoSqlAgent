@@ -127,6 +127,8 @@ class Resolver:
         # time: deterministic resolution beats the LLM for relative expressions
         tw = self.detect_time(text)
         if tw is not None:
+            time_words = re.compile(r"\b(fiscal|fy\s?\d*|quarter|year|month|20\d\d|april|january|date)\b", re.I)
+            assumptions = [a for a in assumptions if not time_words.search(a)]
             if tw.expression and tw.label:
                 assumptions.append(f"'{tw.expression}' = {tw.label} ({tw.start} to {tw.end - timedelta(days=1)}), "
                                    f"{tw.basis} basis, as of {self.as_of}")

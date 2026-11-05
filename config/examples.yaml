@@ -1,0 +1,95 @@
+# Verified question -> SQL examples used as few-shot context (retrieved by similarity).
+# Each example is checked by tests/test_examples.py: it must pass the guardrails for `role`
+# and return rows. Keep these DIFFERENT from eval/cases.yaml so evals measure generalisation.
+examples:
+  - question: "Total net revenue in calendar year 2016"
+    role: analyst
+    sql: |
+      SELECT ROUND(SUM(l.price_lcl * fx.rate), 2) AS net_revenue_usd
+      FROM sales.ord_hdr h
+      JOIN sales.ord_line l ON l.ord_id = h.ord_id
+      JOIN finance.fx_rate_daily fx ON fx.rate_dt = CAST(h.purch_ts AS DATE)
+      WHERE h.ord_stat_cd NOT IN ('canceled', 'unavailable')
+        AND h.purch_ts >= TIMESTAMP '2016-01-01' AND h.purch_ts < TIMESTAMP '2017-01-01'
+
+  - question: "Number of orders by customer region in FY2017"
+    role: analyst
+    sql: |
+      SELECT r.region_nm AS region, COUNT(DISTINCT h.ord_id) AS orders
+      FROM sales.ord_hdr h
+      JOIN crm."CUST_MSTR_V2" c ON c.cust_id = h.cust_id AND c.is_current
+      JOIN ref.region r ON r.state_cd = c.cust_state
+      WHERE h.ord_stat_cd NOT IN ('canceled', 'unavailable')
+        AND h.purch_ts >= TIMESTAMP '2016-04-01' AND h.purch_ts < TIMESTAMP '2017-04-01'
+      GROUP BY 1
+
+  - question: "Top 3 sellers by GMV in FY2017"
+    role: analyst
+    sql: |
+      SELECT l.seller_id, ROUND(SUM((l.price_lcl + l.frt_lcl) * fx.rate), 2) AS gmv_usd
+      FROM sales.ord_hdr h
+      JOIN sales.ord_line l ON l.ord_id = h.ord_id
+      JOIN finance.fx_rate_daily fx ON fx.rate_dt = CAST(h.purch_ts AS DATE)
+      WHERE h.purch_ts >= TIMESTAMP '2016-04-01' AND h.purch_ts < TIMESTAMP '2017-04-01'
+      GROUP BY 1 ORDER BY 2 DESC LIMIT 3
+
+  - question: "Net revenue by English product category in calendar 2016"
+    role: analyst
+    sql: |
+      SELECT x.cat_nm_en AS category, ROUND(SUM(l.price_lcl * fx.rate), 2) AS net_revenue_usd
+      FROM sales.ord_hdr h
+      JOIN sales.ord_line l ON l.ord_id = h.ord_id
+      JOIN finance.fx_rate_daily fx ON fx.rate_dt = CAST(h.purch_ts AS DATE)
+      JOIN product.prod p ON p.prod_id = l.prod_id
+      JOIN product.cat_xlate x ON x.cat_nm_pt = p.cat_nm_pt
+      WHERE h.ord_stat_cd NOT IN ('canceled', 'unavailable')
+        AND h.purch_ts >= TIMESTAMP '2016-01-01' AND h.purch_ts < TIMESTAMP '2017-01-01'
+      GROUP BY 1 ORDER BY 2 DESC
+
+  - question: "Unique customers per state in FY2017"
+    role: analyst
+    sql: |
+      SELECT c.cust_state AS state, COUNT(DISTINCT c.cust_uid) AS active_customers
+      FROM sales.ord_hdr h
+      JOIN crm."CUST_MSTR_V2" c ON c.cust_id = h.cust_id AND c.is_current
+      WHERE h.ord_stat_cd NOT IN ('canceled', 'unavailable')
+        AND h.purch_ts >= TIMESTAMP '2016-04-01' AND h.purch_ts < TIMESTAMP '2017-04-01'
+      GROUP BY 1
+
+  - question: "Late delivery rate by seller state in FY2017"
+    role: analyst
+    sql: |
+      SELECT s.seller_state, AVG(CASE WHEN CAST(h.dlvr_ts AS DATE) > h.est_dlvr_dt THEN 1.0 ELSE 0.0 END)
+             AS late_delivery_rate
+      FROM sales.ord_hdr h
+      JOIN sales.ord_line l ON l.ord_id = h.ord_id AND l.line_no = 1
+      JOIN ops.seller s ON s.seller_id = l.seller_id
+      WHERE h.ord_stat_cd = 'delivered' AND h.dlvr_ts IS NOT NULL
+        AND h.purch_ts >= TIMESTAMP '2016-04-01' AND h.purch_ts < TIMESTAMP '2017-04-01'
+      GROUP BY 1
+
+  - question: "Average delivery days per month in calendar 2016"
+    role: analyst
+    sql: |
+      SELECT date_trunc('month', h.purch_ts) AS month, AVG(date_diff('day', h.purch_ts, h.dlvr_ts))
+             AS avg_delivery_days
+      FROM sales.ord_hdr h
+      WHERE h.ord_stat_cd = 'delivered' AND h.dlvr_ts IS NOT NULL
+        AND h.purch_ts >= TIMESTAMP '2016-01-01' AND h.purch_ts < TIMESTAMP '2017-01-01'
+      GROUP BY 1 ORDER BY 1
+
+  - question: "Headcount by work state"
+    role: hr_analyst
+    sql: |
+      SELECT e.work_state, COUNT(DISTINCT e.emp_id) AS headcount
+      FROM hr.employee e
+      WHERE NOT e.is_attrited
+      GROUP BY 1
+
+  - question: "Average monthly income by job level"
+    role: hr_analyst
+    sql: |
+      SELECT e.job_lvl, AVG(p.monthly_income) AS avg_monthly_income
+      FROM hr.employee e
+      JOIN hr.pay p ON p.emp_id = e.emp_id
+      GROUP BY 1

@@ -29,6 +29,10 @@ CODES: dict[str, tuple[str, bool]] = {
     "V050": ("COST_BUDGET", True),
     "V060": ("EXECUTION_ERROR", True),
     "V061": ("TIMEOUT", True),
+    # spec conformance (does the SQL answer the qualified request?)
+    "V070": ("MISSING_GROUPING", True),
+    "V071": ("MISSING_RANKING", True),
+    "V072": ("WRONG_TIME_WINDOW", True),
 }
 
 

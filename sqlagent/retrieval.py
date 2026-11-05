@@ -47,10 +47,34 @@ class SchemaContext:
     scores: dict[str, float] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class Example:
+    question: str
+    role: str
+    sql: str
+    tables: frozenset[str]
+
+
+def load_examples(path) -> list[Example]:
+    from pathlib import Path
+
+    import yaml
+    p = Path(path)
+    if not p.exists():
+        return []
+    out = []
+    for e in yaml.safe_load(p.read_text())["examples"]:
+        tree = sqlglot.parse_one(e["sql"], read="duckdb")
+        tables = frozenset(f"{t.db}.{t.name}".lower() for t in tree.find_all(exp.Table) if t.db)
+        out.append(Example(e["question"], e["role"], e["sql"].strip(), tables))
+    return out
+
+
 class Retriever:
-    def __init__(self, catalog: Catalog, glossary: Glossary):
+    def __init__(self, catalog: Catalog, glossary: Glossary, examples: list[Example] | None = None):
         self.catalog = catalog
         self.glossary = glossary
+        self.examples = examples or []
         self._metric_tables = {m.id: self._tables_in(m.from_sql) for m in glossary.metrics.values()}
         self._graph: dict[str, set[str]] = {}
         for t in catalog.tables.values():
@@ -160,6 +184,16 @@ class Retriever:
     def _metric_text(m: Metric) -> str:
         where = f"\n  WHERE {m.where}" if m.where else ""
         return f"METRIC {m.id} ({m.label}): {m.description}\n  SELECT {m.sql}\n  FROM {m.from_sql}{where}"
+
+    def similar_examples(self, question: str, role: Role, k: int = 3) -> list[Example]:
+        if not self.examples:
+            return []
+        vis = {t.key for t in self.visible_tables(role)}
+        # score against the whole corpus (stable IDF), then keep only examples the role may see
+        bm25 = BM25Okapi([tokenize(e.question) for e in self.examples])
+        scores = bm25.get_scores(tokenize(question))
+        ranked = sorted(zip(self.examples, scores, strict=True), key=lambda x: -x[1])
+        return [e for e, _ in ranked if e.tables <= vis][:k]
 
     def metric_catalog_text(self, role: Role) -> str:
         vis = {t.key for t in self.visible_tables(role)}

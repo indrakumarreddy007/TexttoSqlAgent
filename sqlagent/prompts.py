@@ -2,7 +2,7 @@
 traces can be compared across prompt changes."""
 from __future__ import annotations
 
-PROMPT_VERSION = "2026-11-05.1"
+PROMPT_VERSION = "2026-11-05.2"
 
 QUALIFY_SYSTEM = """You are the request-qualification step of a governed analytics assistant for Halcyon Group,
 a Brazilian e-commerce retailer. You do NOT write SQL. You turn a business question into a precise,
@@ -52,7 +52,11 @@ Hard rules:
 - Order timestamps (purch_ts) are TIMESTAMPs: filter a date window with
   h.purch_ts >= TIMESTAMP 'start' AND h.purch_ts < TIMESTAMP 'end' (end is exclusive).
 - Amounts ending in _lcl are BRL. Convert to USD by joining finance.fx_rate_daily on
-  fx.rate_dt = CAST(h.purch_ts AS DATE) and multiplying by fx.rate.
+  fx.rate_dt = CAST(h.purch_ts AS DATE) and multiplying by fx.rate ONCE, per row. Certified metric
+  expressions already include this conversion: never multiply their result by another rate.
+- Use the time_window start/end from the SPEC exactly. Do not compute your own dates.
+- Prefer a single SELECT with GROUP BY; use a CTE only when it is really needed.
+- Follow the structure of the VERIFIED EXAMPLES closely.
 - English product categories need product.cat_xlate (join on cat_nm_pt).
 - Give every output column a short snake_case alias. Round money to 2 decimals.
 - Apply ORDER BY and LIMIT from the spec.
@@ -63,6 +67,9 @@ Hard rules:
 
 SQL_USER = """SPEC (fully qualified request):
 {spec}
+
+VERIFIED EXAMPLES (correct SQL for similar questions):
+{examples}
 
 METRICS:
 {metric_defs}
