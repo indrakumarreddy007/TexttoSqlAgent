@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     max_estimated_rows: int = 50_000_000
 
     langfuse_enabled: bool = False
+    # Dev mode exposes the demo identities from config/users.yaml to the web UI's user picker.
+    # Set SQLAGENT_DEV_MODE=false in production, where identity comes from your SSO.
+    dev_mode: bool = True
 
 
 @lru_cache

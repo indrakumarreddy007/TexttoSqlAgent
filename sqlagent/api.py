@@ -3,6 +3,9 @@
     POST /v1/query     {question, conversation_id?}  -> AgentResponse  (answers a pending clarification too)
     POST /v1/validate  {sql}                          -> GuardrailResult (guardrail engine only, no LLM)
     GET  /v1/metrics                                  -> certified metric catalogue
+    GET  /v1/me                                       -> the caller's identity and access scope
+    GET  /v1/dev/identities                           -> demo users for the UI (dev mode only)
+    GET  /                                            -> web UI
     GET  /healthz
 
 Identity comes from the bearer token (see config/users.yaml), never from the request body.
@@ -15,10 +18,11 @@ from pathlib import Path
 
 import yaml
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from sqlagent.agent import Agent
-from sqlagent.config import ROOT
+from sqlagent.config import ROOT, get_settings
 from sqlagent.runtime import build_agent
 from sqlagent.schemas import AgentResponse, GuardrailResult, UserContext
 
@@ -52,6 +56,40 @@ def resolve_user(authorization: str = Header(default="")) -> UserContext:
     if user is None:
         raise HTTPException(status_code=401, detail="invalid or missing bearer token")
     return user
+
+
+STATIC = Path(__file__).resolve().parent / "static"
+
+
+def _scope(u: UserContext) -> tuple[str, str]:
+    labels = {"exec": "Executive", "regional_mgr": "Regional manager", "analyst": "Business analyst",
+              "hr_analyst": "HR analyst", "admin": "Data steward"}
+    scopes = {"exec": "all regions · customer PII masked", "analyst": "all regions · no PII",
+              "hr_analyst": "HR only · names masked · pay aggregated (min 5)", "admin": "unrestricted"}
+    scope = f"regions {', '.join(u.regions) or 'none'} · no PII" if u.role == "regional_mgr" else scopes.get(u.role, "")
+    return labels.get(u.role, u.role), scope
+
+
+@app.get("/", include_in_schema=False)
+def ui() -> FileResponse:
+    return FileResponse(STATIC / "index.html", media_type="text/html")
+
+
+@app.get("/v1/me")
+def me(user: UserContext = Depends(resolve_user)) -> dict:
+    label, scope = _scope(user)
+    return {**user.model_dump(), "label": label, "scope": scope}
+
+
+@app.get("/v1/dev/identities", include_in_schema=False)
+def dev_identities() -> list[dict]:
+    if not get_settings().dev_mode:
+        raise HTTPException(status_code=404, detail="not found")
+    out = []
+    for tok, u in _tokens().items():
+        label, scope = _scope(u)
+        out.append({"token": tok, **u.model_dump(), "label": label, "scope": scope})
+    return out
 
 
 @app.get("/healthz")

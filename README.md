@@ -70,6 +70,25 @@ curl -s localhost:8000/v1/query -H "Authorization: Bearer dev-mgr-se-token" -H "
 
 Answer a clarification by sending the reply with the same `conversation_id`.
 
+## Web UI
+
+Start the API (above) and open http://localhost:8000. In dev mode the page has a user picker
+with the demo identities from `config/users.yaml`, so you can ask the same question as different
+roles and compare the results. Set `SQLAGENT_DEV_MODE=false` in production; the page then asks
+for a bearer token, which your SSO would supply.
+
+- **Ask a question:** chat with clarification buttons. Each answer shows the result table, the
+  assumptions, the certified metric definitions, and the SQL that actually ran, including the
+  row filters and masking the policy added. Refusals show the policy reason.
+- **Check SQL:** paste any SQL to see whether the guardrails allow it for the signed-in user,
+  why not, and what the rewritten query looks like. Nothing is executed.
+
+![Clarification and answer for a regional manager](docs/screenshots/ask-clarify-answer.png)
+
+| Check SQL (dark) | Phone |
+|---|---|
+| ![Check SQL](docs/screenshots/check-sql-dark.png) | ![Phone](docs/screenshots/phone-dark.png) |
+
 ## How it works
 
 ```

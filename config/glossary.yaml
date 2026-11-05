@@ -65,7 +65,7 @@ metrics:
     label: "Active customers"
     owner: crm-data@halcyon.example
     description: "Unique people (cust_uid) with at least one non-canceled order in the period."
-    synonyms: [customers, active customers, unique customers, buyers, number of customers]
+    synonyms: [active customers, unique customers, number of customers, how many customers, customer count, buyers]
     sql: "COUNT(DISTINCT c.cust_uid)"
     from: |
       sales.ord_hdr h

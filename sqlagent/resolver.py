@@ -82,6 +82,10 @@ _FY_RE = re.compile(r"\bfy\s?'?(\d{2,4})\b", re.I)
 _YEAR_RE = re.compile(r"\b(20\d{2})\b")
 
 
+def blocking_metric_pending(ambiguities: list[Ambiguity]) -> bool:
+    return any(a.slot == "metric" and a.blocking for a in ambiguities)
+
+
 class Resolver:
     def __init__(self, glossary: Glossary):
         self.g = glossary
@@ -151,9 +155,11 @@ class Resolver:
                                              options=[self.g.metrics[o].label for o in rule["options"]],
                                              blocking=True))
             elif rule.get("default"):
+                # a default only fills a gap: never add a metric when one is already chosen
+                if spec.metrics or blocking_metric_pending(ambiguities):
+                    continue
                 d = rule["default"]
-                if d not in spec.metrics:
-                    spec.metrics = [d, *[m for m in spec.metrics if m not in rule["options"]]]
+                spec.metrics = [d]
                 others = ", ".join(self.g.metrics[o].label for o in rule["options"] if o != d)
                 assumptions.append(f"'{term}' interpreted as {self.g.metrics[d].label} (other options: {others})")
         # after the user answered once, don't ask the same slot again

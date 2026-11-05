@@ -59,3 +59,20 @@ def test_body_cannot_set_role(client):
 def test_metrics_listing(client):
     r = client.get("/v1/metrics")
     assert {"net_revenue_usd", "order_count"} <= {m["id"] for m in r.json()}
+
+
+def test_ui_is_served(client):
+    r = client.get("/")
+    assert r.status_code == 200 and "Halcyon SQL Copilot" in r.text and "text/html" in r.headers["content-type"]
+
+
+def test_me_reports_scope(client):
+    r = client.get("/v1/me", headers={"Authorization": "Bearer dev-mgr-se-token"})
+    assert r.json()["role"] == "regional_mgr" and "SE" in r.json()["scope"]
+
+
+def test_dev_identities_only_in_dev_mode(client, monkeypatch):
+    assert any(u["role"] == "hr_analyst" for u in client.get("/v1/dev/identities").json())
+    from sqlagent.config import Settings
+    monkeypatch.setattr(api, "get_settings", lambda: Settings(dev_mode=False))
+    assert client.get("/v1/dev/identities").status_code == 404

@@ -183,3 +183,15 @@ def test_routers():
     assert route_after_resolve({"spec": {"ambiguities": [{"blocking": True}]}}) == "clarify"
     assert route_after_resolve({"spec": {"ambiguities": [{"blocking": False}]}}) == "generate_sql"
     assert route_after_resolve({"status": "refused"}) == "refuse"
+
+
+def test_default_term_does_not_add_metric_when_one_is_chosen(glossary):
+    from sqlagent.resolver import Resolver
+    from sqlagent.schemas import QualifiedRequest
+    r = Resolver(glossary)
+    spec = r.resolve(QualifiedRequest(intent="ranking", metrics=["net_revenue_usd"]),
+                     "top customers last quarter", ["Q: Rank by which measure? A: Net revenue (USD)"],
+                     set(glossary.metrics), [])
+    assert spec.metrics == ["net_revenue_usd"]
+    spec = r.resolve(QualifiedRequest(), "how many customers in SP", [], set(glossary.metrics), [])
+    assert spec.metrics == ["active_customers"]
