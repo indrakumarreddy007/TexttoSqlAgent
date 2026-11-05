@@ -1,0 +1,274 @@
+<title>Halcyon Data Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600&display=swap">
+<style>
+/* Layout: reference catalogue. Header with build facts, tab strip (hash-routed), one working column; table list + detail side by side on wide screens. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --ink: #18212e; --muted: #5a6577; --rule: #dde2ea;
+  --accent: #1f5f8b; --accent-soft: #e4eef6; --code: #eef1f5;
+  --ok: #23774a; --ok-soft: #e3f3ea; --warn: #9a6200; --warn-soft: #fbf0db; --bad: #b3372f; --bad-soft: #fbe6e4;
+  --f-display: "IBM Plex Serif", Georgia, serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11161d; --surface: #182029; --ink: #e3e8ef; --muted: #9aa6b6; --rule: #2b3543;
+  --accent: #7db7e0; --accent-soft: #1c2e3d; --code: #1e2733;
+  --ok: #6cc895; --ok-soft: #173325; --warn: #e2b04f; --warn-soft: #33290f; --bad: #ef8a80; --bad-soft: #3a1d1b;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #11161d; --surface: #182029; --ink: #e3e8ef; --muted: #9aa6b6; --rule: #2b3543;
+  --accent: #7db7e0; --accent-soft: #1c2e3d; --code: #1e2733;
+  --ok: #6cc895; --ok-soft: #173325; --warn: #e2b04f; --warn-soft: #33290f; --bad: #ef8a80; --bad-soft: #3a1d1b;
+  color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 14.5px/1.55 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { background: var(--surface); border-bottom: 1px solid var(--rule); }
+header.top .wrap { padding-block: 22px 0; }
+h1 { font: 600 28px/1.2 var(--f-display); margin: 0 0 4px; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0 0 16px; max-width: 75ch; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.fact { border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; background: var(--bg); }
+.fact b { display: block; font: 600 20px/1.2 var(--f-body); font-variant-numeric: tabular-nums; }
+.fact span { font: 12px var(--f-mono); color: var(--muted); }
+nav.tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+nav.tabs a { padding: 8px 14px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; }
+nav.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
+nav.tabs a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { padding-block: 20px 80px; }
+h2 { font: 600 19px/1.3 var(--f-display); margin: 0 0 6px; }
+.lead { color: var(--muted); margin: 0 0 16px; max-width: 80ch; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.stack { display: grid; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.name { font: 500 14px var(--f-mono); }
+.meta { font: 12px var(--f-mono); color: var(--muted); }
+.pill { font: 500 11px/1 var(--f-mono); padding: 4px 7px; border-radius: 99px; white-space: nowrap; background: var(--code); color: var(--muted); }
+.p-ok { background: var(--ok-soft); color: var(--ok); } .p-warn { background: var(--warn-soft); color: var(--warn); }
+.p-bad { background: var(--bad-soft); color: var(--bad); } .p-acc { background: var(--accent-soft); color: var(--accent); }
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; margin-top: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 5px 9px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+th { background: var(--code); font: 500 11.5px var(--f-mono); white-space: nowrap; }
+td { white-space: nowrap; } td.wrap-text { white-space: normal; min-width: 220px; }
+td.n { text-align: right; font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: none; }
+pre { font: 12.5px/1.5 var(--f-mono); background: var(--code); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0 0; white-space: pre; }
+code { font: 12.5px var(--f-mono); }
+.split { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 820px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.tlist { display: grid; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+@media (max-width: 820px) { .tlist { position: static; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
+.tlist button { text-align: left; border: 1px solid transparent; background: none; border-radius: 6px; padding: 6px 9px; cursor: pointer; color: var(--ink); font: inherit; }
+.tlist button[aria-pressed="true"] { background: var(--surface); border-color: var(--rule); }
+.tlist .name { display: block; } .tlist .meta { display: block; }
+input.search { width: 100%; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; margin-bottom: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chip { border: 1px solid var(--rule); background: var(--surface); color: var(--ink); border-radius: 99px; padding: 4px 11px; font-size: 13px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.s-public, .s-internal { } .s-pii_direct { background: var(--bad-soft); color: var(--bad); }
+.s-pii_sensitive { background: var(--warn-soft); color: var(--warn); } .s-free_text { background: var(--accent-soft); color: var(--accent); }
+h4 { margin: 14px 0 4px; font: 500 11.5px var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+details summary { cursor: pointer; color: var(--accent); font-size: 13px; margin-top: 8px; }
+.q { font-size: 15.5px; font-weight: 500; margin: 4px 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.arrow { color: var(--muted); }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <h1>Halcyon Data Explorer</h1>
+    <p class="sub" id="sub"></p>
+    <div class="facts" id="facts"></div>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#sources">Kaggle sources</a>
+      <a href="#tables">Warehouse tables</a>
+      <a href="#queries">Certified queries</a>
+      <a href="#access">Roles</a>
+      <a href="#evals">Eval dataset</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap" id="main"></main>
+
+<script>
+"use strict";
+const D = /*__DATA__*/null;
+const $ = (s, r = document) => r.querySelector(s);
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null && k !== false) n.append(k);
+  return n;
+}
+const num = (n) => Number(n).toLocaleString("en-US");
+const fmt = (v) => v === null || v === undefined ? "∅" : typeof v === "number" ? (Number.isInteger(v) ? num(v) : v.toLocaleString("en-US", { maximumFractionDigits: 4 })) : String(v);
+function table(cols, rows, opts = {}) {
+  const numeric = cols.map((_, i) => rows.length && rows.every((r) => r[i] === null || typeof r[i] === "number"));
+  return el("div", { class: "tbl" }, el("table", {},
+    el("thead", {}, el("tr", {}, ...cols.map((c) => el("th", { text: c })))),
+    el("tbody", {}, ...rows.map((r) => el("tr", {}, ...r.map((v, i) => el("td", { class: (numeric[i] ? "n" : "") + (opts.wrap && opts.wrap.includes(i) ? " wrap-text" : ""), text: fmt(v) })))))));
+}
+const sensPill = (s) => el("span", { class: `pill s-${s}`, text: s });
+
+// ---------------------------------------------------------------- header
+const totalRaw = D.raw.reduce((a, f) => a + f.rows, 0);
+$("#sub").textContent = `Everything the agent works with, generated from the build on ${D.info.built_at.slice(0, 10)}. Source: ${D.info.data_source} data; FX: ${D.info.fx_source}; "today" for relative dates is ${D.info.as_of_date}.`;
+for (const [v, l] of [[D.raw.length, "Kaggle files"], [num(totalRaw), "raw rows"], [D.tables.length, "warehouse tables"],
+                      [D.metrics.length, "certified metrics"], [D.examples.length, "verified examples"], [D.cases.length, "eval cases"]])
+  $("#facts").append(el("div", { class: "fact" }, el("b", { text: String(v) }), el("span", { text: l })));
+
+// ---------------------------------------------------------------- views
+function viewSources() {
+  const out = el("section");
+  out.append(el("h2", { text: "Kaggle source files" }),
+    el("p", { class: "lead", text: "The two public Kaggle datasets as downloaded, before any reshaping. Arrows show which warehouse tables each file feeds." }));
+  const byDs = {};
+  for (const f of D.raw) (byDs[f.dataset] ||= { url: f.url, files: [] }).files.push(f);
+  for (const [ds, { url, files }] of Object.entries(byDs)) {
+    out.append(el("h4", {}, document.createTextNode(ds + " · "), el("a", { href: url, target: "_blank", rel: "noopener", text: "Kaggle page" })));
+    const s = el("div", { class: "stack" });
+    for (const f of files) {
+      s.append(el("div", { class: "card" },
+        el("div", { class: "row" }, el("span", { class: "name", text: f.file }),
+          el("span", { class: "meta", text: `${num(f.rows)} rows · ${(f.bytes / 1048576).toFixed(1)} MB` }),
+          el("span", { class: "arrow", text: "→" }), ...f.targets.map((t) => el("a", { class: "pill p-acc", href: "#tables", "data-table": t, text: t, onclick: () => { state.table = t; } }))),
+        el("details", {}, el("summary", { text: `${f.columns.length} columns · sample rows` }), table(f.columns, f.sample))));
+    }
+    out.append(s);
+  }
+  return out;
+}
+
+const state = { table: null, tq: "", cat: "all" };
+function viewTables() {
+  const out = el("section");
+  out.append(el("h2", { text: "Warehouse tables" }),
+    el("p", { class: "lead", text: "The curated DuckDB warehouse the agent queries, with the enterprise problems the build adds on purpose. Column types come from the warehouse; descriptions and sensitivity come from config/catalog.yaml. Direct identifiers are synthetic and hidden here." }));
+  const split = el("div", { class: "split" });
+  const list = el("div", { class: "tlist" });
+  const detail = el("div");
+  const search = el("input", { class: "search", id: "tsearch", type: "search", placeholder: "Filter tables or columns", "aria-label": "Filter tables" });
+  search.value = state.tq;
+  const left = el("div", {}, search, list);
+  function drawList() {
+    list.textContent = "";
+    const q = state.tq.toLowerCase();
+    const shown = D.tables.filter((t) => !q || t.fqn.toLowerCase().includes(q) || t.description.toLowerCase().includes(q) || t.columns.some((c) => c.name.toLowerCase().includes(q)) || t.synonyms.some((s) => s.includes(q)));
+    if (!shown.find((t) => t.fqn === state.table)) state.table = shown[0] ? shown[0].fqn : null;
+    for (const t of shown) list.append(el("button", { type: "button", "aria-pressed": String(t.fqn === state.table), onclick: () => { state.table = t.fqn; drawList(); drawDetail(); } },
+      el("span", { class: "name", text: t.fqn }), el("span", { class: "meta", text: `${num(t.rows)} rows${t.deprecated ? " · deprecated" : ""}` })));
+  }
+  function drawDetail() {
+    detail.textContent = "";
+    const t = D.tables.find((x) => x.fqn === state.table);
+    if (!t) { detail.append(el("p", { class: "meta", text: "No table matches the filter." })); return; }
+    const flags = [];
+    if (t.deprecated) flags.push(el("span", { class: "pill p-bad", text: `deprecated → ${t.replaced_by}` }));
+    if (t.default_filter) flags.push(el("span", { class: "pill p-acc", text: `auto filter: ${t.default_filter}` }));
+    if (t.required_filter_any.length) flags.push(el("span", { class: "pill p-warn", text: `must filter on: ${t.required_filter_any.join(" | ")}` }));
+    flags.push(el("span", { class: "pill", text: `size: ${t.size_class}` }));
+    detail.append(el("div", { class: "card" },
+      el("div", { class: "row" }, el("span", { class: "name", text: t.fqn }), el("span", { class: "meta", text: `${num(t.rows)} rows · owner ${t.owner}` })),
+      el("p", { text: t.description }), el("div", { class: "row" }, ...flags),
+      t.sources.length ? el("p", { class: "meta", text: "Built from: " + t.sources.join(", ") }) : null,
+      t.synonyms.length ? el("p", { class: "meta", text: "Business names: " + t.synonyms.join(", ") }) : null,
+      el("h4", { text: "Columns" }),
+      el("div", { class: "tbl" }, el("table", {}, el("thead", {}, el("tr", {}, ...["column", "type", "sensitivity", "description"].map((c) => el("th", { text: c })))),
+        el("tbody", {}, ...t.columns.map((c) => el("tr", {}, el("td", {}, el("code", { text: c.name })), el("td", { class: "meta", text: c.type }), el("td", {}, sensPill(c.sensitivity)), el("td", { class: "wrap-text", text: c.description })))))),
+      t.joins.length ? el("div", {}, el("h4", { text: "Joins" }), el("ul", {}, ...t.joins.map((j) => el("li", {}, el("code", { text: j }))))) : null,
+      el("h4", { text: "Sample rows" }), table(t.sample_columns, t.sample)));
+  }
+  search.addEventListener("input", () => { state.tq = search.value; drawList(); drawDetail(); });
+  drawList(); drawDetail();
+  split.append(left, detail);
+  out.append(split);
+  return out;
+}
+
+function viewQueries() {
+  const out = el("section");
+  out.append(el("h2", { text: "Certified metrics" }),
+    el("p", { class: "lead", text: "The only definitions the agent may use for business measures (config/glossary.yaml). The SQL generator is told to use these expressions verbatim." }));
+  const g = el("div", { class: "grid2" });
+  for (const m of D.metrics) g.append(el("div", { class: "card" },
+    el("div", { class: "row" }, el("span", { class: "name", text: m.id }), el("span", { class: "meta", text: m.label })),
+    el("p", { text: m.description }), el("p", { class: "meta", text: "Also called: " + m.synonyms.join(", ") }), el("pre", { text: m.sql })));
+  out.append(g, el("h2", { text: "Verified example queries", style: "margin-top:28px" }),
+    el("p", { class: "lead", text: "Worked question-to-SQL pairs shown to the model as few-shot examples (config/examples.yaml). They are checked against the guardrails in CI and kept different from the eval questions." }));
+  const g2 = el("div", { class: "grid2" });
+  for (const e of D.examples) g2.append(el("div", { class: "card" },
+    el("div", { class: "row" }, el("span", { class: "q", text: e.question }), el("span", { class: "pill", text: e.role })), el("pre", { text: e.sql.trim() })));
+  out.append(g2);
+  return out;
+}
+
+function viewAccess() {
+  const out = el("section");
+  out.append(el("h2", { text: "Roles and what they can see" }),
+    el("p", { class: "lead", text: "From config/policy.yaml. The guardrail engine enforces these on every query, whatever SQL the model writes." }));
+  const g = el("div", { class: "grid2" });
+  for (const r of D.roles) g.append(el("div", { class: "card" },
+    el("div", { class: "row" }, el("span", { class: "name", text: r.name }), el("span", { class: "meta", text: `max ${num(r.max_rows)} rows` })),
+    el("p", { text: r.description }),
+    el("p", { class: "meta", text: "Schemas: " + r.schemas.join(", ") }),
+    el("div", { class: "row" }, ...Object.entries(r.sensitivity).map(([k, v]) => el("span", { class: "pill " + (v === "allow" ? "p-ok" : v === "mask" ? "p-warn" : "p-bad"), text: `${k}: ${v}` }))),
+    r.row_filters.length ? el("p", { class: "meta", text: "Row filters on: " + r.row_filters.join(", ") }) : null,
+    r.aggregate_only.length ? el("p", { class: "meta", text: "Aggregate-only (min group 5): " + r.aggregate_only.join(", ") }) : null));
+  out.append(g);
+  return out;
+}
+
+function viewEvals() {
+  const out = el("section");
+  const cats = ["all", ...new Set(D.cases.map((c) => c.category))];
+  out.append(el("h2", { text: "Eval dataset" }),
+    el("p", { class: "lead", text: "eval/cases.yaml: each case is a question asked as a specific user, the behaviour we expect, and for answerable cases a gold query run as an unrestricted admin. The result shown under each gold query is its real output on this warehouse; the agent's answer must match it." }));
+  const chips = el("div", { class: "chips" });
+  const list = el("div", { class: "stack" });
+  const expectPill = { answer: "p-ok", clarify: "p-warn", refuse: "p-bad" };
+  function draw() {
+    chips.textContent = ""; list.textContent = "";
+    for (const c of cats) {
+      const n = c === "all" ? D.cases.length : D.cases.filter((x) => x.category === c).length;
+      chips.append(el("button", { type: "button", class: "chip", "aria-pressed": String(state.cat === c), text: `${c.replace("_", " ")} (${n})`, onclick: () => { state.cat = c; draw(); } }));
+    }
+    for (const c of D.cases.filter((x) => state.cat === "all" || x.category === state.cat)) {
+      const who = c.user.role + (c.user.regions ? ` (${c.user.regions.join(",")})` : "");
+      const card = el("div", { class: "card" },
+        el("div", { class: "row" }, el("span", { class: "name", text: c.id }), el("span", { class: "pill", text: c.category.replace("_", " ") }),
+          el("span", { class: "pill " + expectPill[c.expect], text: "expect: " + c.expect }), el("span", { class: "meta", text: "as " + who }),
+          c.oracle_pass === true ? el("span", { class: "pill p-ok", text: "oracle ✓" }) : c.oracle_pass === false ? el("span", { class: "pill p-bad", text: "oracle ✗" }) : null),
+        el("p", { class: "q", text: c.question }),
+        c.expect === "clarify" ? el("p", { class: "meta", text: `Must ask about: ${c.clarify_slots.join(", ")} · then the user replies "${c.follow_up}"` }) : null,
+        c.note ? el("p", { class: "meta", text: "Note: " + c.note }) : null);
+      if (c.gold) {
+        card.append(el("details", {}, el("summary", { text: `Gold SQL and result (${num(c.gold.row_count)} row${c.gold.row_count === 1 ? "" : "s"}${c.ordered ? ", order matters" : ""})` }),
+          el("pre", { text: c.gold_sql }), table(c.gold.columns, c.gold.rows),
+          c.gold.row_count > c.gold.rows.length ? el("p", { class: "meta", text: `First ${c.gold.rows.length} of ${num(c.gold.row_count)} rows.` }) : null));
+      } else {
+        card.append(el("p", { class: "meta", text: "No gold query: the agent must refuse, and must not return any rows." }));
+      }
+      list.append(card);
+    }
+  }
+  draw();
+  out.append(chips, list);
+  return out;
+}
+
+const VIEWS = { sources: viewSources, tables: viewTables, queries: viewQueries, access: viewAccess, evals: viewEvals };
+function route() {
+  let h = location.hash.replace("#", "");
+  if (!VIEWS[h]) h = "sources";
+  for (const a of document.querySelectorAll("nav.tabs a")) { if (a.getAttribute("href") === "#" + h) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
+  const m = $("#main"); m.textContent = ""; m.append(VIEWS[h]());
+}
+window.addEventListener("hashchange", route);
+route();
+</script>
