@@ -30,3 +30,10 @@ def test_ranking_without_order_by_is_flagged():
 def test_wrong_dates_are_flagged():
     sql = GOOD.replace("2017-04-01", "2018-04-01")
     assert "V072" in codes(sql, time_window=TW)
+
+
+def test_trend_without_time_grouping_is_flagged():
+    sql = "SELECT SUM(l.price_lcl) FROM sales.ord_line l"
+    assert codes(sql, intent="trend", grain="month") == ["V070"]
+    ok = "SELECT date_trunc('month', h.purch_ts), COUNT(*) FROM sales.ord_hdr h GROUP BY 1 ORDER BY 1"
+    assert codes(ok, intent="trend", grain="month") == []

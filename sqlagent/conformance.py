@@ -22,12 +22,16 @@ def check_conformance(sql: str, spec: QualifiedRequest) -> list[Violation]:
         return []
     out: list[Violation] = []
     outer = tree if isinstance(tree, exp.Select) else None
-    if spec.dimensions and spec.intent != "lookup":
+    wants_breakdown = bool(spec.dimensions) or spec.grain != "none" or spec.intent == "trend"
+    if wants_breakdown and spec.intent != "lookup":
         has_group = any(s.args.get("group") is not None for s in tree.find_all(exp.Select))
         if not has_group and outer is not None and any(e.find(exp.AggFunc) for e in outer.expressions):
-            out.append(violation("V070", f"the request is broken down by {spec.dimensions} but the query "
-                                         "returns a single aggregate",
-                                 "Add the dimension columns to SELECT and GROUP BY them."))
+            by = spec.dimensions or [f"{spec.grain if spec.grain != 'none' else 'month'} (time trend)"]
+            hint = ("Add the dimension columns to SELECT and GROUP BY them." if spec.dimensions else
+                    f"SELECT date_trunc('{spec.grain if spec.grain != 'none' else 'month'}', h.purch_ts) AS period, "
+                    "... GROUP BY 1 ORDER BY 1.")
+            out.append(violation("V070", f"the request is broken down by {by} but the query returns a single "
+                                         "aggregate", hint))
     if spec.intent == "ranking" and outer is not None and outer.args.get("order") is None:
         out.append(violation("V071", "the request is a ranking but the outer query has no ORDER BY",
                              f"ORDER BY the metric {spec.order_dir.upper()} and LIMIT {spec.limit or 10}."))
