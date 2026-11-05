@@ -35,6 +35,7 @@ CODES: dict[str, tuple[str, bool]] = {
     "V072": ("WRONG_TIME_WINDOW", True),
     "V073": ("MISMATCHED_JOIN_KEYS", True),
     "V074": ("METRIC_DEFINITION_NOT_USED", True),
+    "V075": ("WRONG_GRAIN", True),
 }
 
 

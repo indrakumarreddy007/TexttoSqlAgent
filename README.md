@@ -115,6 +115,8 @@ pip install -e ".[ui]"
 streamlit run apps/streamlit_app.py
 ```
 
+![Simple UI: regional manager's top customers, answered by the local model](docs/screenshots/simple-ui-answer.png)
+
 Free hosting (Streamlit Community Cloud, Hugging Face Spaces, Azure Container Apps) and the LLM
 options for it (Groq or Gemini free tiers, Claude API, local Ollama) are in
 [`docs/DEPLOY.md`](docs/DEPLOY.md).

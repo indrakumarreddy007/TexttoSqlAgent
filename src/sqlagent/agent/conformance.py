@@ -37,7 +37,8 @@ def _unqualified(expr: exp.Expression) -> str:
 
 def check_conformance(sql: str, spec: QualifiedRequest,
                       join_pairs: set[frozenset[str]] | None = None,
-                      metric_filters: dict[str, str] | None = None) -> list[Violation]:
+                      metric_filters: dict[str, str] | None = None,
+                      bad_group_keys: dict[str, str] | None = None) -> list[Violation]:
     try:
         tree = sqlglot.parse_one(sql, read="duckdb")
     except Exception:  # noqa: BLE001 - parse errors are reported by the guardrail engine
@@ -83,6 +84,18 @@ def check_conformance(sql: str, spec: QualifiedRequest,
                 if _unqualified(cond) not in present:
                     out.append(violation("V074", f"certified metric {metric} requires the condition {cond.sql()}",
                                          "Use the certified metric's WHERE conditions exactly as given in METRICS."))
+    if bad_group_keys:
+        flagged: set[str] = set()
+        for sel in tree.find_all(exp.Select):
+            group = sel.args.get("group")
+            if group is None:
+                continue
+            for col in [*group.find_all(exp.Column), *(c for e in sel.expressions for c in e.find_all(exp.Column))]:
+                name = col.name.lower()
+                if name in bad_group_keys and name not in flagged and not col.find_ancestor(exp.AggFunc):
+                    flagged.add(name)
+                    out.append(violation("V075", f"{col.sql()} is not a valid grouping key",
+                                         f"Group by {bad_group_keys[name]} instead."))
     tw = spec.time_window
     if tw and tw.start and tw.end:
         text = tree.sql(dialect="duckdb")

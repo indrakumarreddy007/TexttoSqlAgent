@@ -23,6 +23,7 @@ class Column:
     description: str
     sensitivity: str
     synonyms: tuple[str, ...] = ()
+    group_by_instead: str | None = None
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,7 @@ class Catalog:
                 if cname.lower() not in wh_cols:
                     raise ValueError(f"catalog column {fqn}.{cname} not found in warehouse")
                 cols[cname.lower()] = Column(cname, wh_cols[cname.lower()], cspec.get("description", ""), sens,
-                                             tuple(cspec.get("synonyms", [])))
+                                             tuple(cspec.get("synonyms", [])), cspec.get("group_by_instead"))
             missing = set(wh_cols) - set(cols)
             if missing:
                 raise ValueError(f"warehouse columns not documented in catalog for {fqn}: {sorted(missing)}")

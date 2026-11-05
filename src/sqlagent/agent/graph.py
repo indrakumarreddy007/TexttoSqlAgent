@@ -16,6 +16,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, TypedDict
 
 import duckdb
@@ -164,6 +165,8 @@ def build_graph(svc: Services) -> StateGraph:
     join_pairs = {frozenset((j.left_col.lower(), j.right_col.lower()))
                   for t in svc.catalog.tables.values() for j in t.joins}
     metric_filters = {m.id: m.where for m in svc.glossary.metrics.values() if m.where}
+    bad_group_keys = {c.name.lower(): c.group_by_instead for t in svc.catalog.tables.values()
+                      for c in t.columns.values() if c.group_by_instead}
 
     def user_of(state: AgentState) -> UserContext:
         return UserContext.model_validate(state["user"])
@@ -286,7 +289,7 @@ def build_graph(svc: Services) -> StateGraph:
         violations = list(r.violations)
         if r.allowed and state.get("spec"):
             violations = check_conformance(state["candidate_sql"], QualifiedRequest.model_validate(state["spec"]),
-                                           join_pairs, metric_filters)
+                                           join_pairs, metric_filters, bad_group_keys)
         ok = r.allowed and not violations
         return {"guardrail": r.model_dump(), "enforced_sql": r.enforced_sql if ok else None,
                 "violations": [v.model_dump() for v in violations]}
@@ -382,8 +385,8 @@ def build_graph(svc: Services) -> StateGraph:
 
 
 def _fmt(v: Any) -> str:
-    if isinstance(v, float):
-        return f"{v:,.2f}"
+    if isinstance(v, (float, Decimal)):
+        return f"{float(v):,.2f}"
     return str(v)
 
 

@@ -8,6 +8,7 @@
 #   required_filter_any  - query must filter/join on at least one of these columns (correctable)
 #   deprecated/replaced_by
 # joins: keys = [this_table_column, other_table_column]
+# column group_by_instead: the column is not a valid grouping key; the hint names the one to use
 #   size_class           - small | medium | large
 
 version: 1
@@ -20,7 +21,7 @@ tables:
     default_filter: "is_deleted = FALSE"
     columns:
       ord_id: {description: "Order identifier (32-char hex)", sensitivity: internal}
-      cust_id: {description: "Per-order customer key. Joins crm.CUST_MSTR_V2.cust_id. NOT a person id: use cust_uid for unique customers.", sensitivity: internal}
+      cust_id: {description: "Per-order customer key. Joins crm.CUST_MSTR_V2.cust_id. NOT a person id: use cust_uid for unique customers.", sensitivity: internal, group_by_instead: "c.cust_uid (crm.CUST_MSTR_V2 joined on cust_id with is_current)"}
       ord_stat_cd: {description: "Order status: delivered, shipped, canceled, unavailable, invoiced, processing, created, approved", sensitivity: public, synonyms: [status, order status]}
       purch_ts: {description: "Purchase timestamp. THE order date for reporting.", sensitivity: public, synonyms: [order date, purchase date, ordered at]}
       appr_ts: {description: "Payment approval timestamp", sensitivity: public}
@@ -74,7 +75,7 @@ tables:
     required_filter_any: [is_current, valid_from, valid_to]
     columns:
       cust_sk: {description: "Surrogate key of the version row", sensitivity: internal}
-      cust_id: {description: "Per-order customer key (joins sales.ord_hdr.cust_id)", sensitivity: internal}
+      cust_id: {description: "Per-order customer key (joins sales.ord_hdr.cust_id)", sensitivity: internal, group_by_instead: "c.cust_uid (crm.CUST_MSTR_V2 joined on cust_id with is_current)"}
       cust_uid: {description: "Unique person id. Use for counting unique customers.", sensitivity: internal, synonyms: [unique customer]}
       cust_nm: {description: "Customer full name", sensitivity: pii_direct, synonyms: [customer name, name]}
       email: {description: "Email address", sensitivity: pii_direct}

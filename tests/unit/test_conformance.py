@@ -56,3 +56,13 @@ def test_certified_metric_filter_must_be_used():
     assert "V074" in [v.code for v in check_conformance(drifted, spec, None, filters)]
     ok = drifted.replace("h.ord_stat_cd = 'delivered'", "x.ord_stat_cd NOT IN ('canceled','unavailable')")
     assert check_conformance(ok, spec, None, filters) == []
+
+
+def test_per_order_customer_key_is_not_a_grouping_key():
+    bad = {"cust_id": "c.cust_uid"}
+    sql = "SELECT h.cust_id, COUNT(*) FROM sales.ord_hdr h GROUP BY h.cust_id"
+    assert [v.code for v in check_conformance(sql, QualifiedRequest(dimensions=["customer"]), None, None, bad)] \
+        == ["V075"]
+    ok = ("SELECT c.cust_uid, COUNT(DISTINCT h.cust_id) FROM sales.ord_hdr h JOIN crm.\"CUST_MSTR_V2\" c "
+          "ON c.cust_id = h.cust_id AND c.is_current GROUP BY c.cust_uid")
+    assert check_conformance(ok, QualifiedRequest(dimensions=["customer"]), None, None, bad) == []
