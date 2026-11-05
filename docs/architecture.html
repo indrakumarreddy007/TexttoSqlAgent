@@ -197,9 +197,9 @@ flowchart LR
 <div class="tbl"><table>
 <thead><tr><th>Component</th><th>Responsibility</th><th>Reference implementation</th></tr></thead>
 <tbody>
-<tr><td>API gateway</td><td>AuthN, tenant and rate limits, request IDs, conversation IDs</td><td>FastAPI <code>POST /v1/query</code>, <code>POST /v1/validate</code></td></tr>
+<tr><td>API gateway</td><td>AuthN, tenant and rate limits, request IDs, conversation IDs</td><td><code>src/sqlagent/api</code>: <code>POST /v1/query</code>, <code>POST /v1/validate</code>, web UI</td></tr>
 <tr><td>Identity resolver</td><td>Maps the caller to policy attributes (role, region, clearance) from IdP claims. Never from the prompt.</td><td>Header or JWT claims → <code>UserContext</code></td></tr>
-<tr><td>Orchestrator</td><td>LangGraph <code>StateGraph</code>: one node per step, conditional edges for clarify, retry and refuse, <code>interrupt()</code> for human-in-the-loop clarification, checkpointer for multi-turn state</td><td><code>sqlagent/graph.py</code> (LangGraph 1.x)</td></tr>
+<tr><td>Orchestrator</td><td>LangGraph <code>StateGraph</code>: one node per step, conditional edges for clarify, retry and refuse, <code>interrupt()</code> for human-in-the-loop clarification, checkpointer for multi-turn state</td><td><code>src/sqlagent/agent/graph.py</code> (LangGraph 1.x)</td></tr>
 <tr><td>Catalog / glossary</td><td>Table and column semantics, sensitivity tags, join keys, certified metrics, synonyms, defaults</td><td><code>catalog/*.yaml</code>, swappable for DataHub / Unity Catalog</td></tr>
 <tr><td>Policy engine</td><td>Table/column ACL, masking, row-level security, aggregation thresholds, cost rules</td><td><code>policy/guardrails.yaml</code> + sqlglot AST engine</td></tr>
 <tr><td>Executor</td><td>Read-only, least-privilege connection with timeout and row cap</td><td>DuckDB <code>read_only=True</code>, external access disabled</td></tr>
@@ -225,7 +225,7 @@ flowchart LR
 </tbody></table></div>
 
 <h3>Orchestration with LangGraph</h3>
-<p>The pipeline is a LangGraph <code>StateGraph</code> over a typed <code>AgentState</code>. LangGraph supplies what a hand-written loop would otherwise have to build: conditional routing, bounded cycles, pausing for a human, durable per-conversation state, streaming, and node-level tracing. Guardrail and policy nodes are plain Python functions that call the framework-free <code>sqlagent.guardrails</code> package. The security boundary therefore doesn't depend on LangGraph, and the same engine backs <code>/v1/validate</code>.</p>
+<p>The pipeline is a LangGraph <code>StateGraph</code> over a typed <code>AgentState</code>. LangGraph supplies what a hand-written loop would otherwise have to build: conditional routing, bounded cycles, pausing for a human, durable per-conversation state, streaming, and node-level tracing. Guardrail and policy nodes are plain Python functions that call the framework-free <code>src/sqlagent/guardrails</code> package. The security boundary therefore doesn't depend on LangGraph, and the same engine backs <code>/v1/validate</code>.</p>
 <div class="diagram">
 <pre class="mermaid">
 flowchart TD
@@ -464,7 +464,7 @@ LIMIT 1000</code></pre>
 <div class="note">Why rewrite rather than ask the model to add filters? A rewrite is applied to every table occurrence, including inside CTEs, subqueries and self-joins, whatever the model wrote. Asking the model gives a probabilistic guarantee, and probabilistic access control is not access control.</div>
 
 <h2 id="data"><span class="n">5</span>Data and metadata layer</h2>
-<p>The warehouse build (<code>setup/build_warehouse.py</code>) loads raw AdventureWorks into staging, then creates curated domain schemas with deliberate enterprise problems. The problems are seeded deterministically, so every candidate gets the same database and the gold answers are stable.</p>
+<p>The warehouse build (<code>src/warehouse/build.py</code>) loads raw AdventureWorks into staging, then creates curated domain schemas with deliberate enterprise problems. The problems are seeded deterministically, so every candidate gets the same database and the gold answers are stable.</p>
 <div class="tbl"><table>
 <thead><tr><th>Schema</th><th>Contents</th><th>Planted complexity</th></tr></thead>
 <tbody>
@@ -520,7 +520,7 @@ LIMIT 1000</code></pre>
 <tr><td>Consistency</td><td>Same answer across 3 seeds and 2 paraphrases</td><td class="num">≥ 85%</td></tr>
 <tr><td>Latency / cost</td><td>p50 and p95 end-to-end time; tokens per request</td><td class="num">p95 ≤ 15s</td></tr>
 </tbody></table></div>
-<p>The harness (<code>grader/grade.py</code>) talks to any implementation through the HTTP contract. It runs the gold SQL itself as an admin, compares results, writes a per-case JSON report and a summary, and diffs against the last baseline so regressions show by category.</p>
+<p>The harness (<code>src/sqlagent/evaluation/harness.py</code>) talks to any implementation through the HTTP contract. It runs the gold SQL itself as an admin, compares results, writes a per-case JSON report and a summary, and diffs against the last baseline so regressions show by category.</p>
 
 <h2 id="online"><span class="n">8</span>Online evaluation</h2>
 <div class="diagram">
@@ -611,7 +611,7 @@ flowchart TB
 </tbody></table></div>
 
 <h2 id="status"><span class="n">11</span>Implementation status</h2>
-<p>Reference implementation in <code>txt2sql-agent/</code>. Every row below was run and verified, except where marked.</p>
+<p>Reference implementation: <a href="https://github.com/indrakumarreddy007/TexttoSqlAgent">github.com/indrakumarreddy007/TexttoSqlAgent</a> (src layout: <code>src/sqlagent</code>, <code>src/warehouse</code>). Every row below was run and verified, except where marked.</p>
 <div class="tbl"><table>
 <thead><tr><th>Item</th><th>Result</th><th>State</th></tr></thead>
 <tbody>
@@ -621,7 +621,7 @@ flowchart TB
 <tr><td>Automated tests</td><td class="num">122 pass: security corpus (~60 hostile queries), policy execution, property test, graph routes, API contract, eval harness</td><td><span class="pill det">done</span></td></tr>
 <tr><td>Oracle eval (gold answers through the full pipeline)</td><td class="num">28 / 28 on real data · 0 unsafe answers · p95 195 ms</td><td><span class="pill det">done</span></td></tr>
 <tr><td>API</td><td>Exercised live: auth (401), row-level-security rewrite, PII refusal (V021), input guard</td><td><span class="pill det">done</span></td></tr>
-<tr><td>Live LLM eval</td><td>Needs an LLM. The build sandbox's network policy blocks the Ollama registry and Hugging Face. Run <code>python eval/run_eval.py</code> where Ollama is available.</td><td><span class="pill hard">pending</span></td></tr>
+<tr><td>Live LLM eval</td><td>Needs an LLM. The build sandbox's network policy blocks the Ollama registry and Hugging Face. Run <code>sqlagent-eval</code> where Ollama is available.</td><td><span class="pill hard">pending</span></td></tr>
 <tr><td>CI on GitHub</td><td>Workflow is written (lint, tests, oracle-eval gate). It needs a GitHub repository to push to.</td><td><span class="pill hard">pending</span></td></tr>
 </tbody></table></div>
 

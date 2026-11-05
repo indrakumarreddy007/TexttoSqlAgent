@@ -18,16 +18,22 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Lint
         run: ruff check .
-      - name: Unit, security corpus, policy, graph and API tests
-        run: pytest -q
+      - name: Unit tests
+        run: pytest -q tests/unit
+      - name: Security corpus (release gate)
+        run: pytest -q tests/security
+      - name: Integration tests (warehouse, policy, graph, API, evals)
+        run: pytest -q tests/integration
       - name: Build sample warehouse (same schema as Kaggle)
         run: |
-          python setup/make_sample_data.py
-          python setup/build_warehouse.py
+          halcyon-warehouse sample
+          halcyon-warehouse build
       - name: Oracle eval (gold answers through the full pipeline) - release gate
-        run: python eval/run_eval.py --mode oracle --gate
+        run: sqlagent-eval --mode oracle --gate
+      - name: Docker image builds
+        run: docker build -f deploy/Dockerfile -t halcyon-sql-copilot:ci .
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: eval-report
-          path: eval/reports/last-oracle.*
+          path: evals/reports/last-oracle.*

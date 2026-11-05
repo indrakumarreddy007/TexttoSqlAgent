@@ -32,14 +32,23 @@ dev = ["pytest>=8.0", "hypothesis>=6.100", "ruff>=0.5"]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[project.scripts]
+sqlagent = "sqlagent.cli:main"
+sqlagent-api = "sqlagent.api.app:serve"
+sqlagent-eval = "sqlagent.evaluation.harness:main"
+halcyon-warehouse = "warehouse.cli:main"
+
 [tool.setuptools.packages.find]
-include = ["sqlagent*"]
+where = ["src"]
+include = ["sqlagent*", "warehouse*"]
 
 [tool.setuptools.package-data]
-sqlagent = ["static/*"]
+"sqlagent.api" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
+markers = ["live: needs a running LLM (excluded by default)"]
 addopts = "-q"
 
 [tool.ruff]
@@ -51,8 +60,8 @@ select = ["E", "F", "W", "I", "B", "UP", "ISC", "BLE", "S608"]
 ignore = ["S608"]  # building SQL strings is this project's purpose; guarded by the engine
 
 [tool.ruff.lint.per-file-ignores]
-"setup/*" = ["BLE001"]
-"sqlagent/guardrails/engine.py" = ["BLE001"]
+"src/warehouse/*" = ["BLE001", "E402"]
+"src/sqlagent/guardrails/engine.py" = ["BLE001"]
 "tests/conftest.py" = ["E402"]
 
 [tool.ruff.lint.flake8-bugbear]

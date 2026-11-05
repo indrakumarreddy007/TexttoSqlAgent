@@ -10,8 +10,8 @@ __pycache__/
 .venv/
 
 # eval runtime state (keep only the last-* summary reports)
-eval/reports/*
-!eval/reports/last-oracle.json
-!eval/reports/last-oracle.md
-!eval/reports/last-live.json
-!eval/reports/last-live.md
+evals/reports/*
+!evals/reports/last-oracle.json
+!evals/reports/last-oracle.md
+!evals/reports/last-live.json
+!evals/reports/last-live.md

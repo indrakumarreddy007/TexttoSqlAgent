@@ -1,0 +1,30 @@
+# Local stack: API + Ollama (free, local LLM).
+#   docker compose -f deploy/docker-compose.yml up -d ollama
+#   docker compose -f deploy/docker-compose.yml exec ollama ollama pull qwen2.5-coder:7b
+#   docker compose -f deploy/docker-compose.yml run --rm api halcyon-warehouse download --source github-mirror
+#   docker compose -f deploy/docker-compose.yml run --rm api halcyon-warehouse build
+#   docker compose -f deploy/docker-compose.yml up -d api
+# Tracing: run Langfuse's own self-hosted compose (https://langfuse.com/self-hosting) and set
+# SQLAGENT_LANGFUSE_ENABLED=true plus LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST in .env.
+services:
+  ollama:
+    image: ollama/ollama:0.5.7
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      SQLAGENT_LLM_PROVIDER: ollama
+      SQLAGENT_LLM_BASE_URL: http://ollama:11434
+    volumes: ["../data:/app/data"]
+    ports: ["8000:8000"]
+    depends_on: [ollama]
+
+volumes:
+  ollama: {}

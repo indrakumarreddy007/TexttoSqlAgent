@@ -6,14 +6,48 @@ guess, writes SQL, and proves before running anything that the query obeys acces
 cost policy.
 
 - **Design (HLD):** [`docs/architecture.html`](docs/architecture.html)
+- **Data explorer:** [`docs/data-explorer.html`](docs/data-explorer.html), also served at `/explorer`
 - **Stack (all free / open source):** LangGraph, sqlglot, DuckDB, FastAPI, Pydantic, Ollama
   (`qwen2.5-coder:7b`), rank-bm25, Faker, pytest + hypothesis, Langfuse (optional), Docker,
   GitHub Actions
 - **Data:** Kaggle [Olist Brazilian E-Commerce](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
   and [IBM HR Analytics](https://www.kaggle.com/datasets/pavansubhasht/ibm-hr-analytics-attrition-dataset),
   reshaped into an enterprise warehouse with the usual problems: cryptic names, soft deletes, SCD2
-  history, a deprecated table, BRL amounts with FX, an April fiscal year, Portuguese categories and
-  synthetic PII
+  history, a deprecated table, BRL amounts with daily FX (Federal Reserve H.10), an April fiscal
+  year, Portuguese categories and synthetic PII
+
+## Repository layout
+
+```
+src/
+  sqlagent/                 the service (installable package)
+    core/schemas.py         typed contracts: UserContext, QualifiedRequest, Violation, AgentResponse
+    metadata/               catalog, glossary (certified metrics) and policy loaders
+    guardrails/             SECURITY BOUNDARY: AST checks + policy-view rewrite (framework-free)
+    agent/                  LangGraph graph, service facade, retrieval, resolver, prompts,
+                            input guard, spec-conformance checks
+    llm/                    provider-neutral structured LLM client + ScriptedLLM test double
+    execution/              read-only DuckDB executor (timeout, row cap, EXPLAIN cost check)
+    observability/          append-only JSONL audit log
+    api/                    FastAPI app + web UI (static/index.html)
+    evaluation/             offline eval harness (sqlagent-eval)
+    bootstrap.py            production wiring (LLM, checkpointer, audit, tracing)
+    config.py               settings (SQLAGENT_* env vars / .env)
+    cli.py                  interactive CLI (sqlagent)
+  warehouse/                data pipeline: download / sample / build (halcyon-warehouse)
+config/                     runtime configuration: catalog, glossary, policy, examples, dev users
+evals/
+  datasets/dev.yaml         eval set: 28 cases with gold SQL and expected behaviour
+  reports/                  last-oracle / last-live summaries (runtime files are git-ignored)
+tests/
+  unit/                     pure logic, no warehouse
+  security/                 hostile-SQL corpus (release gate)
+  integration/              warehouse, policy execution, graph routes, API, examples, eval harness
+scripts/                    build_data_explorer.py + templates/
+deploy/                     Dockerfile, docker-compose.yml (API + Ollama)
+docs/                       architecture.html, data-explorer.html, screenshots/
+.github/workflows/ci.yml    lint, unit, security, integration, oracle-eval gate, docker build
+```
 
 ## Quickstart
 
@@ -21,29 +55,29 @@ cost policy.
 pip install -e ".[dev,kaggle]"
 ```
 
-Get the data. Use real Kaggle data with a token in `~/.kaggle/kaggle.json`:
+Get the data: real Kaggle data with a token in `~/.kaggle/kaggle.json`:
 
 ```bash
-python setup/download_kaggle.py
+halcyon-warehouse download
 ```
 
-If Kaggle is blocked on your network, download the same files from pinned GitHub mirrors (each
-file is SHA-256 verified and matches the Kaggle row counts):
+If Kaggle is blocked on your network, get the same files from pinned GitHub mirrors (each file is
+SHA-256 verified and matches the Kaggle row counts):
 
 ```bash
-python setup/download_kaggle.py --source github-mirror
+halcyon-warehouse download --source github-mirror
 ```
 
 Or, offline or in CI, generate seeded data with the same schemas:
 
 ```bash
-python setup/make_sample_data.py
+halcyon-warehouse sample
 ```
 
-Build the warehouse (about 5 seconds for the sample data, about 12 seconds for the full Kaggle data):
+Build the warehouse (about 12 seconds for the full Kaggle data):
 
 ```bash
-python setup/build_warehouse.py
+halcyon-warehouse build
 ```
 
 Start a local LLM (free):
@@ -52,30 +86,25 @@ Start a local LLM (free):
 ollama pull qwen2.5-coder:7b
 ```
 
-Ask a question:
+Run the API and web UI, then open http://localhost:8000:
 
 ```bash
-python -m sqlagent.cli --role regional_mgr --regions SE "who were our top customers last quarter?"
+sqlagent-api --port 8000
 ```
 
-Or run the API:
+Or ask from the terminal:
 
 ```bash
-uvicorn sqlagent.api:app --port 8000
+sqlagent --role regional_mgr --regions SE "who were our top customers last quarter?"
 ```
 
-```bash
-curl -s localhost:8000/v1/query -H "Authorization: Bearer dev-mgr-se-token" -H "Content-Type: application/json" -d '{"question": "top customers last quarter"}'
-```
-
-Answer a clarification by sending the reply with the same `conversation_id`.
+The `Makefile` has shortcuts for all of these (`make data-mirror warehouse api`).
 
 ## Web UI
 
-Start the API (above) and open http://localhost:8000. In dev mode the page has a user picker
-with the demo identities from `config/users.yaml`, so you can ask the same question as different
-roles and compare the results. Set `SQLAGENT_DEV_MODE=false` in production; the page then asks
-for a bearer token, which your SSO would supply.
+In dev mode the page has a user picker with the demo identities from `config/users.yaml`, so you can
+ask the same question as different roles and compare the results. Set `SQLAGENT_DEV_MODE=false` in
+production; the page then asks for a bearer token, which your SSO would supply.
 
 - **Ask a question:** chat with clarification buttons. Each answer shows the result table, the
   assumptions, the certified metric definitions, and the SQL that actually ran, including the
@@ -89,30 +118,17 @@ for a bearer token, which your SSO would supply.
 |---|---|
 | ![Check SQL](docs/screenshots/check-sql-dark.png) | ![Phone](docs/screenshots/phone-dark.png) |
 
-## How it works
+## API
 
-```
-input_guard -> retrieve_context -> qualify (LLM) -> resolve_spec -> [clarify: interrupt()]
-  -> generate_sql (LLM) -> validate_and_enforce -> cost_check -> execute -> output_guard -> answer
-       ^____________ correctable violations, at most 3 attempts ___________|
-  -> refuse
-```
-
-| Module | Responsibility |
+| Endpoint | Purpose |
 |---|---|
-| `sqlagent/graph.py` | LangGraph `StateGraph`; routers are pure functions |
-| `sqlagent/guardrails/engine.py` | **Security boundary.** AST checks + policy-view rewrite (masking, row-level security, k-anonymity, LIMIT cap) |
-| `sqlagent/input_guard.py` | Injection, write intent, role claims, requests for restricted data |
-| `sqlagent/retrieval.py` | BM25 + foreign-key join paths, filtered by role |
-| `sqlagent/resolver.py` | Fiscal-calendar date resolution, glossary defaults, clarify-or-proceed decision |
-| `sqlagent/llm.py` | Provider-neutral structured output (Ollama / Anthropic / OpenAI-compatible); `ScriptedLLM` for tests |
-| `sqlagent/executor.py` | Read-only DuckDB, external access off, timeout, row cap, `EXPLAIN` cost check |
-| `sqlagent/audit.py` | Append-only JSONL audit log with a per-node trace |
-| `config/*.yaml` | Catalog, glossary (certified metrics), policy as code, dev identities |
+| `POST /v1/query` | Ask, or answer a pending clarification with the same `conversation_id` |
+| `POST /v1/validate` | Guardrail check of any SQL for the caller (no LLM, nothing executed) |
+| `GET /v1/metrics` | Certified metric catalogue |
+| `GET /v1/me` | Caller identity and access scope |
+| `GET /` · `GET /explorer` | Web UI · data explorer |
 
-The LLM never enforces policy. Every base table in generated SQL is replaced by a policy view:
-permitted columns only, masks applied, deleted rows removed, the caller's region filter injected.
-That happens regardless of what the model wrote.
+Identity always comes from the bearer token, never from the request body.
 
 ## Roles (`config/policy.yaml`)
 
@@ -124,32 +140,24 @@ That happens regardless of what the model wrote.
 | `hr_analyst` | HR data; names masked; pay is aggregate-only with minimum group size 5 |
 | `admin` | Unrestricted; internal use for eval gold answers |
 
-Dev tokens are in `config/users.yaml`. In production, replace `api.resolve_user` with JWT validation.
-
 ## Testing and evaluation
 
 ```bash
 pytest -q
 ```
 
-That runs 122 tests: data invariants, catalog consistency, a security corpus of about 60 hostile
-queries, execution-level policy checks, a hypothesis property test for row-level security, every
-graph route with a scripted LLM, and the API contract.
-
 ```bash
-python eval/run_eval.py --mode oracle --gate
+sqlagent-eval --mode oracle --gate
 ```
 
-That replays the gold answers through the full pipeline without an LLM. It must score 100%.
+The oracle mode replays the gold answers through the full pipeline without an LLM and must score
+100%. For the live eval against the configured LLM:
 
 ```bash
-python eval/run_eval.py --gate --baseline eval/reports/last-live.json
+sqlagent-eval --gate --baseline evals/reports/last-live.json
 ```
 
-That is the live eval against the configured LLM.
-
-The eval set (`eval/cases.yaml`, 28 cases) covers: well-specified, glossary, underspecified
-(clarify), role-scoped, must-refuse and adversarial. Release gates:
+Release gates:
 
 | Gate | Threshold |
 |---|---|
@@ -159,10 +167,17 @@ The eval set (`eval/cases.yaml`, 28 cases) covers: well-specified, glossary, und
 | Clarification recall | ≥ 90% |
 | Over-clarification | ≤ 10% |
 
-Reports are written to `eval/reports/`.
+## Docker
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+See the comments at the top of `deploy/docker-compose.yml` for pulling the model and building the
+warehouse inside the containers.
 
 ## Configuration
 
-Settings come from `SQLAGENT_*` environment variables or `.env` (see `.env.example`). To switch
-the LLM, set `SQLAGENT_LLM_PROVIDER=anthropic` and `SQLAGENT_LLM_MODEL=<model>`, or use `openai`
-with `SQLAGENT_LLM_BASE_URL` for Groq, vLLM or LM Studio.
+Settings come from `SQLAGENT_*` environment variables or `.env` (see `.env.example`). To switch the
+LLM, set `SQLAGENT_LLM_PROVIDER=anthropic` and `SQLAGENT_LLM_MODEL=<model>`, or use `openai` with
+`SQLAGENT_LLM_BASE_URL` for Groq, vLLM or LM Studio.

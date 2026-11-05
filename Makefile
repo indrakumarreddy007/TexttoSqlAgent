@@ -1,16 +1,19 @@
-.PHONY: install data-kaggle data-sample warehouse test eval-oracle eval api cli lint docker
+.PHONY: install data data-mirror data-sample warehouse lint test test-unit test-security eval-oracle eval api cli explorer docker
 
-install:        ## install with dev extras
+install:          ## editable install with dev extras
 	pip install -e ".[dev,kaggle]"
 
-data-kaggle:    ## download real data from Kaggle (needs ~/.kaggle/kaggle.json)
-	python setup/download_kaggle.py
+data:             ## real data from Kaggle (needs ~/.kaggle/kaggle.json)
+	halcyon-warehouse download
 
-data-sample:    ## offline / CI: seeded synthetic data with the Kaggle schemas
-	python setup/make_sample_data.py
+data-mirror:      ## same Kaggle files from pinned, checksum-verified GitHub mirrors
+	halcyon-warehouse download --source github-mirror
 
-warehouse:      ## build data/warehouse.duckdb from data/raw
-	python setup/build_warehouse.py
+data-sample:      ## offline / CI: seeded synthetic data with the Kaggle schemas
+	halcyon-warehouse sample
+
+warehouse:        ## build data/warehouse.duckdb from data/raw
+	halcyon-warehouse build
 
 lint:
 	ruff check .
@@ -18,17 +21,26 @@ lint:
 test:
 	pytest -q
 
-eval-oracle:    ## pipeline self-test, no LLM needed
-	python eval/run_eval.py --mode oracle --gate
+test-unit:
+	pytest -q tests/unit
 
-eval:           ## live eval with the configured LLM
-	python eval/run_eval.py --baseline eval/reports/last-live.json
+test-security:
+	pytest -q tests/security
 
-api:
-	uvicorn sqlagent.api:app --reload --port 8000
+eval-oracle:      ## pipeline self-test, no LLM needed (release gate)
+	sqlagent-eval --mode oracle --gate
+
+eval:             ## live eval with the configured LLM
+	sqlagent-eval --baseline evals/reports/last-live.json
+
+api:              ## API + web UI on http://localhost:8000
+	sqlagent-api --port 8000
 
 cli:
-	python -m sqlagent.cli --role regional_mgr --regions SE "top customers last quarter"
+	sqlagent --role regional_mgr --regions SE "top customers last quarter"
+
+explorer:         ## regenerate docs/data-explorer.html
+	python scripts/build_data_explorer.py
 
 docker:
-	docker compose build
+	docker build -f deploy/Dockerfile -t halcyon-sql-copilot .

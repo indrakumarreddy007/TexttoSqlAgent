@@ -2,22 +2,18 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import duckdb
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "setup"))
-
-import build_warehouse
-import make_sample_data
-
-from sqlagent.executor import Executor
+from sqlagent.config import ROOT
+from sqlagent.core.schemas import UserContext
+from sqlagent.execution.executor import Executor
 from sqlagent.guardrails import GuardrailEngine
 from sqlagent.metadata import Catalog, Glossary, Policy
-from sqlagent.schemas import UserContext
+from warehouse import build as build_warehouse
+from warehouse import sample as make_sample_data
 
 
 @pytest.fixture(scope="session")
