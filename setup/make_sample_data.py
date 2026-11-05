@@ -111,7 +111,8 @@ def make_olist(n_orders: int, rng: random.Random, raw: Path = RAW) -> None:
         customers.append([cust_id, person, rng.choice(zips[st]), rng.choice(STATES[st][1]), st])
         status = wchoice(rng, STATUSES)
         approved = purchase + timedelta(hours=rng.uniform(0.2, 30)) if status not in ("created",) else None
-        carrier = approved + timedelta(days=rng.uniform(1, 5)) if approved and status in ("delivered", "shipped") else None
+        shipped = approved and status in ("delivered", "shipped")
+        carrier = approved + timedelta(days=rng.uniform(1, 5)) if shipped else None
         delivered = carrier + timedelta(days=rng.uniform(2, 20)) if carrier and status == "delivered" else None
         est = (purchase + timedelta(days=rng.randint(15, 40))).replace(hour=0, minute=0, second=0)
         oid = uid(rng)

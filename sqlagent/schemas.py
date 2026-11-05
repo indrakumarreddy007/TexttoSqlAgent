@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -87,7 +87,7 @@ class CandidateSQL(BaseModel):
 
 
 # --------------------------------------------------------------------------- API
-class Status(str, Enum):
+class Status(StrEnum):
     answered = "answered"
     needs_clarification = "needs_clarification"
     refused = "refused"
